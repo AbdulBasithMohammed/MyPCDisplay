@@ -1,0 +1,290 @@
+---
+author: "built for @abdulbasith - white & light blue deck"
+
+display:
+  DISPLAY_SIZE: 3.5"
+  DISPLAY_ORIENTATION: landscape
+  DISPLAY_RGB_LED: 255, 255, 255
+
+static_images:
+  BACKGROUND:
+    PATH: background.png
+    X: 0
+    Y: 0
+    WIDTH: 480
+    HEIGHT: 320
+
+static_text:
+  CPU_LABEL:
+    TEXT: "CPU"
+    X: 124
+    Y: 132
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 15
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+  GPU_LABEL:
+    TEXT: "GPU"
+    X: 354
+    Y: 132
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 15
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+
+STATS:
+  # ---------- zone 1 : clock ----------
+  DATE:
+    INTERVAL: 1
+    HOUR:
+      TEXT:
+        SHOW: True
+        FORMAT: "HH:mm"
+        X: 28
+        Y: 18
+        WIDTH: 180
+        HEIGHT: 56
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 50
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+    DAY:
+      TEXT:
+        SHOW: True
+        FORMAT: "EEE d MMM"
+        X: 282
+        Y: 26
+        WIDTH: 170
+        HEIGHT: 26
+        ANCHOR: rt
+        ALIGN: right
+        FONT: roboto/Roboto-Bold.ttf
+        FONT_SIZE: 20
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+  UPTIME:
+    INTERVAL: 30
+    FORMATTED:
+      TEXT:
+        SHOW: True
+        X: 282
+        Y: 56
+        WIDTH: 170
+        HEIGHT: 20
+        ANCHOR: rt
+        ALIGN: right
+        FONT: roboto/Roboto-Regular.ttf
+        FONT_SIZE: 15
+        FONT_COLOR: 110, 144, 168
+        BACKGROUND_IMAGE: background.png
+
+  # ---------- zone 2 : cpu / gpu ----------
+  CPU:
+    PERCENTAGE:
+      INTERVAL: 1
+      RADIAL:
+        SHOW: True
+        X: 72
+        Y: 168
+        RADIUS: 40
+        WIDTH: 10
+        MIN_VALUE: 0
+        MAX_VALUE: 100
+        ANGLE_START: 120
+        ANGLE_END: 60
+        ANGLE_STEPS: 1
+        ANGLE_SEP: 0
+        CLOCKWISE: True
+        BAR_COLOR: 45, 164, 232
+        DRAW_BAR_BACKGROUND: True
+        BAR_BACKGROUND_COLOR: 223, 240, 252
+        SHOW_TEXT: True
+        SHOW_UNIT: True
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 20
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+    TEMPERATURE:
+      INTERVAL: 2
+      # Disabled: LHM needs a ring0 driver blocked by Memory Integrity, so this
+      # reads 0. The CUSTOM CpuTemperature sensor owns this slot instead.
+      TEXT:
+        SHOW: False
+        SHOW_UNIT: True
+        X: 124
+        Y: 150
+        WIDTH: 110
+        HEIGHT: 36
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 30
+        FONT_COLOR: 45, 164, 232
+        COLOR_THRESHOLDS:
+          - ABOVE: 0
+            COLOR: 45, 164, 232
+          - ABOVE: 70
+            COLOR: 232, 150, 45
+          - ABOVE: 83
+            COLOR: 224, 78, 68
+        BACKGROUND_IMAGE: background.png
+      GRAPH:
+        SHOW: False
+        X: 124
+        Y: 194
+        WIDTH: 108
+        HEIGHT: 5
+        MIN_VALUE: 20
+        MAX_VALUE: 95
+        BAR_COLOR: 45, 164, 232
+        BAR_COLOR_THRESHOLDS:
+          - ABOVE: 0
+            COLOR: 45, 164, 232
+          - ABOVE: 70
+            COLOR: 232, 150, 45
+          - ABOVE: 83
+            COLOR: 224, 78, 68
+        BAR_OUTLINE: False
+        BACKGROUND_IMAGE: background.png
+
+  GPU:
+    INTERVAL: 1
+    PERCENTAGE:
+      RADIAL:
+        SHOW: True
+        X: 302
+        Y: 168
+        RADIUS: 40
+        WIDTH: 10
+        MIN_VALUE: 0
+        MAX_VALUE: 100
+        ANGLE_START: 120
+        ANGLE_END: 60
+        ANGLE_STEPS: 1
+        ANGLE_SEP: 0
+        CLOCKWISE: True
+        BAR_COLOR: 45, 164, 232
+        DRAW_BAR_BACKGROUND: True
+        BAR_BACKGROUND_COLOR: 223, 240, 252
+        SHOW_TEXT: True
+        SHOW_UNIT: True
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 20
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+    TEMPERATURE:
+      TEXT:
+        SHOW: True
+        SHOW_UNIT: True
+        X: 354
+        Y: 150
+        WIDTH: 110
+        HEIGHT: 36
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 30
+        FONT_COLOR: 45, 164, 232
+        COLOR_THRESHOLDS:
+          - ABOVE: 0
+            COLOR: 45, 164, 232
+          - ABOVE: 70
+            COLOR: 232, 150, 45
+          - ABOVE: 83
+            COLOR: 224, 78, 68
+        BACKGROUND_IMAGE: background.png
+      GRAPH:
+        SHOW: True
+        X: 354
+        Y: 194
+        WIDTH: 108
+        HEIGHT: 5
+        MIN_VALUE: 20
+        MAX_VALUE: 95
+        BAR_COLOR: 45, 164, 232
+        BAR_COLOR_THRESHOLDS:
+          - ABOVE: 0
+            COLOR: 45, 164, 232
+          - ABOVE: 70
+            COLOR: 232, 150, 45
+          - ABOVE: 83
+            COLOR: 224, 78, 68
+        BAR_OUTLINE: False
+        BACKGROUND_IMAGE: background.png
+
+  # ---------- zone 3 : now playing + seconds bar ----------
+  CUSTOM:
+    INTERVAL: 1
+
+    ClockSeconds:
+      GRAPH:
+        SHOW: True
+        X: 28
+        Y: 84
+        WIDTH: 424
+        HEIGHT: 5
+        MIN_VALUE: 0
+        MAX_VALUE: 59
+        BAR_COLOR: 45, 164, 232
+        BAR_OUTLINE: False
+        BACKGROUND_IMAGE: background.png
+
+    CpuTemperature:
+      TEXT:
+        SHOW: True
+        X: 124
+        Y: 150
+        WIDTH: 110
+        HEIGHT: 36
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 30
+        # Muted grey is the fallback, used when the value is "n/a" (not a
+        # number, so no threshold matches). Real readings get a threshold colour.
+        FONT_COLOR: 150, 174, 192
+        COLOR_THRESHOLDS:
+          - ABOVE: 0
+            COLOR: 45, 164, 232
+          - ABOVE: 70
+            COLOR: 232, 150, 45
+          - ABOVE: 83
+            COLOR: 224, 78, 68
+        BACKGROUND_IMAGE: background.png
+      GRAPH:
+        SHOW: True
+        X: 124
+        Y: 194
+        WIDTH: 108
+        HEIGHT: 5
+        MIN_VALUE: 20
+        MAX_VALUE: 95
+        BAR_COLOR: 45, 164, 232
+        BAR_COLOR_THRESHOLDS:
+          - ABOVE: 0
+            COLOR: 45, 164, 232
+          - ABOVE: 70
+            COLOR: 232, 150, 45
+          - ABOVE: 83
+            COLOR: 224, 78, 68
+        BAR_OUTLINE: False
+        BACKGROUND_IMAGE: background.png
+
+    NowPlayingTitle:
+      TEXT:
+        SHOW: True
+        X: 92
+        Y: 251
+        WIDTH: 356
+        HEIGHT: 26
+        FONT: malgun/malgunbd.ttf
+        FONT_SIZE: 20
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+    NowPlayingArtist:
+      TEXT:
+        SHOW: True
+        X: 92
+        Y: 280
+        WIDTH: 356
+        HEIGHT: 22
+        FONT: malgun/malgun.ttf
+        FONT_SIZE: 16
+        FONT_COLOR: 110, 144, 168
+        BACKGROUND_IMAGE: background.png

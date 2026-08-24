@@ -1,0 +1,34 @@
+---
+author: "built for @abdulbasith - white & light blue deck (League of Legends)"
+
+# This screen is drawn as a single composited image, not assembled from theme
+# elements: it is icon-led, and the theme engine cannot drive images from a
+# sensor. library/sensors/league_render.py builds the frame and returns a path;
+# the BITMAP element (a local addition in library/stats.py) blits it.
+#
+# There is deliberately no static background image - the frame covers the whole
+# panel, so drawing a background first would push 300 KB over the wire twice.
+#
+# Content follows the phase:
+#   locked in    -> summoner spells + skill order
+#   first 3 min  -> starting items
+#   after that   -> core build
+
+display:
+  DISPLAY_SIZE: 3.5"
+  DISPLAY_ORIENTATION: landscape
+  DISPLAY_RGB_LED: 255, 255, 255
+
+STATS:
+  CUSTOM:
+    # The picture only changes when the phase does, and the renderer returns the
+    # same path until then, so this interval costs a dictionary lookup.
+    INTERVAL: 2
+
+    LeagueFrame:
+      BITMAP:
+        SHOW: True
+        X: 0
+        Y: 0
+        WIDTH: 480
+        HEIGHT: 320

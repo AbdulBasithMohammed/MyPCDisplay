@@ -1,0 +1,212 @@
+---
+author: "built for @abdulbasith - white & light blue deck (detail screen)"
+
+display:
+  DISPLAY_SIZE: 3.5"
+  DISPLAY_ORIENTATION: landscape
+  DISPLAY_RGB_LED: 255, 255, 255
+
+static_images:
+  BACKGROUND:
+    PATH: background.png
+    X: 0
+    Y: 0
+    WIDTH: 480
+    HEIGHT: 320
+
+static_text:
+  MEMORY_LABEL:
+    TEXT: "MEMORY"
+    X: 28
+    Y: 18
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 14
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+  DISK_LABEL:
+    TEXT: "DISK"
+    X: 28
+    Y: 120
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 14
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+  NET_LABEL:
+    TEXT: "NETWORK"
+    X: 262
+    Y: 120
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 14
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+  NET_DOWN_LABEL:
+    TEXT: "DOWN"
+    X: 262
+    Y: 150
+    FONT: roboto/Roboto-Medium.ttf
+    FONT_SIZE: 13
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+  VRAM_LABEL:
+    TEXT: "VRAM"
+    X: 28
+    Y: 246
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 13
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+  PING_LABEL:
+    TEXT: "PING"
+    X: 398
+    Y: 246
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 13
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+  NET_UP_LABEL:
+    TEXT: "UP"
+    X: 262
+    Y: 184
+    FONT: roboto/Roboto-Medium.ttf
+    FONT_SIZE: 13
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+
+STATS:
+  # ---------- zone 1 : memory ----------
+  NET:
+    INTERVAL: 1
+    WLO:
+      DOWNLOAD:
+        TEXT:
+          SHOW: True
+          X: 322
+          Y: 142
+          WIDTH: 130
+          HEIGHT: 28
+          ANCHOR: rt
+          FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+          FONT_SIZE: 20
+          FONT_COLOR: 45, 164, 232
+          BACKGROUND_IMAGE: background.png
+      UPLOAD:
+        TEXT:
+          SHOW: True
+          X: 322
+          Y: 176
+          WIDTH: 130
+          HEIGHT: 28
+          ANCHOR: rt
+          FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+          FONT_SIZE: 20
+          FONT_COLOR: 18, 52, 80
+          BACKGROUND_IMAGE: background.png
+
+  # ---------- zone 3 : clock + uptime + ping ----------
+  PING:
+    INTERVAL: 5
+    TEXT:
+      SHOW: True
+      X: 322
+      Y: 262
+      WIDTH: 130
+      HEIGHT: 30
+      ANCHOR: rt
+      FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+      FONT_SIZE: 22
+      FONT_COLOR: 45, 164, 232
+      BACKGROUND_IMAGE: background.png
+
+  # ---------- readable memory + disk (built-ins render raw megabytes) ----------
+  CUSTOM:
+    INTERVAL: 3
+
+    MemoryUsage:
+      TEXT:
+        SHOW: True
+        X: 28
+        Y: 36
+        WIDTH: 424
+        HEIGHT: 42
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 32
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+      GRAPH:
+        SHOW: True
+        X: 28
+        Y: 84
+        WIDTH: 424
+        HEIGHT: 5
+        MIN_VALUE: 0
+        MAX_VALUE: 100
+        BAR_COLOR: 45, 164, 232
+        BAR_COLOR_THRESHOLDS:
+          - ABOVE: 0
+            COLOR: 45, 164, 232
+          - ABOVE: 80
+            COLOR: 232, 150, 45
+          - ABOVE: 92
+            COLOR: 224, 78, 68
+        BAR_OUTLINE: False
+        BACKGROUND_IMAGE: background.png
+
+    DiskUsage:
+      TEXT:
+        SHOW: True
+        X: 28
+        Y: 142
+        WIDTH: 190
+        HEIGHT: 34
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 22
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+      GRAPH:
+        SHOW: True
+        X: 28
+        Y: 190
+        WIDTH: 190
+        HEIGHT: 5
+        MIN_VALUE: 0
+        MAX_VALUE: 100
+        BAR_COLOR: 45, 164, 232
+        BAR_COLOR_THRESHOLDS:
+          - ABOVE: 0
+            COLOR: 45, 164, 232
+          - ABOVE: 80
+            COLOR: 232, 150, 45
+          - ABOVE: 92
+            COLOR: 224, 78, 68
+        BAR_OUTLINE: False
+        BACKGROUND_IMAGE: background.png
+
+    GpuVram:
+      TEXT:
+        SHOW: True
+        X: 28
+        Y: 262
+        WIDTH: 210
+        HEIGHT: 30
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 22
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+      GRAPH:
+        SHOW: True
+        X: 28
+        Y: 296
+        WIDTH: 210
+        HEIGHT: 5
+        MIN_VALUE: 0
+        MAX_VALUE: 100
+        BAR_COLOR: 45, 164, 232
+        BAR_COLOR_THRESHOLDS:
+          - ABOVE: 0
+            COLOR: 45, 164, 232
+          - ABOVE: 80
+            COLOR: 232, 150, 45
+          - ABOVE: 92
+            COLOR: 224, 78, 68
+        BAR_OUTLINE: False
+        BACKGROUND_IMAGE: background.png

@@ -1,0 +1,126 @@
+---
+author: "built for @abdulbasith - white & light blue deck (Discord voice)"
+
+# Data comes from the local Discord IPC pipe via library/sensors/discord_rpc.py.
+# Credentials live in services.yaml under `discord:`.
+
+display:
+  DISPLAY_SIZE: 3.5"
+  DISPLAY_ORIENTATION: landscape
+  DISPLAY_RGB_LED: 255, 255, 255
+
+static_images:
+  BACKGROUND:
+    PATH: background.png
+    X: 0
+    Y: 0
+    WIDTH: 480
+    HEIGHT: 320
+
+static_text:
+  VOICE_LABEL:
+    TEXT: "VOICE"
+    X: 28
+    Y: 18
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 13
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+  SPEAKING_LABEL:
+    TEXT: "SPEAKING"
+    X: 36
+    Y: 122
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 13
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+  IN_CHANNEL_LABEL:
+    TEXT: "IN CHANNEL"
+    X: 28
+    Y: 246
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 12
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+
+STATS:
+  CUSTOM:
+    # 1s keeps the speaking indicator responsive; a text line costs ~68 ms.
+    INTERVAL: 1
+
+    # ---------- zone 1 : channel ----------
+    DiscordChannel:
+      TEXT:
+        SHOW: True
+        X: 28
+        Y: 36
+        WIDTH: 292
+        HEIGHT: 34
+        FONT: malgun/malgunbd.ttf
+        FONT_SIZE: 26
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+    DiscordGuild:
+      TEXT:
+        SHOW: True
+        X: 28
+        Y: 70
+        WIDTH: 292
+        HEIGHT: 22
+        FONT: malgun/malgun.ttf
+        FONT_SIZE: 15
+        FONT_COLOR: 110, 144, 168
+        BACKGROUND_IMAGE: background.png
+
+    DiscordCount:
+      TEXT:
+        SHOW: True
+        X: 344
+        Y: 34
+        WIDTH: 108
+        HEIGHT: 26
+        ANCHOR: rt
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 18
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+    DiscordSelfState:
+      TEXT:
+        SHOW: True
+        X: 344
+        Y: 64
+        WIDTH: 108
+        HEIGHT: 24
+        ANCHOR: rt
+        FONT: roboto/Roboto-Bold.ttf
+        FONT_SIZE: 15
+        FONT_COLOR: 45, 164, 232
+        BACKGROUND_IMAGE: background.png
+
+    # ---------- zone 2 : who is talking ----------
+    DiscordSpeaking:
+      TEXT:
+        SHOW: True
+        X: 36
+        Y: 148
+        WIDTH: 416
+        HEIGHT: 44
+        FONT: malgun/malgunbd.ttf
+        FONT_SIZE: 30
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+    # ---------- zone 3 : roster ----------
+    DiscordMembers:
+      TEXT:
+        SHOW: True
+        X: 28
+        Y: 264
+        WIDTH: 424
+        HEIGHT: 22
+        FONT: malgun/malgun.ttf
+        FONT_SIZE: 15
+        FONT_COLOR: 110, 144, 168
+        BACKGROUND_IMAGE: background.png

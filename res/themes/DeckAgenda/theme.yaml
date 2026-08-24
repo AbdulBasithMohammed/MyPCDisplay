@@ -1,0 +1,166 @@
+---
+author: "built for @abdulbasith - white & light blue deck (agenda screen)"
+
+# Weather comes from Open-Meteo (no API key) and the calendar from a private
+# iCal URL - both configured in services.yaml, not here.
+
+display:
+  DISPLAY_SIZE: 3.5"
+  DISPLAY_ORIENTATION: landscape
+  DISPLAY_RGB_LED: 255, 255, 255
+
+static_images:
+  BACKGROUND:
+    PATH: background.png
+    X: 0
+    Y: 0
+    WIDTH: 480
+    HEIGHT: 320
+
+static_text:
+  NEXT_LABEL:
+    TEXT: "NEXT"
+    X: 28
+    Y: 120
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 13
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+  THEN_LABEL:
+    TEXT: "LATER"
+    X: 28
+    Y: 246
+    FONT: roboto/Roboto-Bold.ttf
+    FONT_SIZE: 12
+    FONT_COLOR: 110, 144, 168
+    BACKGROUND_IMAGE: background.png
+
+STATS:
+  CUSTOM:
+    INTERVAL: 5
+
+    # ---------- zone 1 : weather ----------
+    WeatherTemp:
+      TEXT:
+        SHOW: True
+        X: 28
+        Y: 24
+        WIDTH: 160
+        HEIGHT: 52
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 42
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+    WeatherDesc:
+      TEXT:
+        SHOW: True
+        X: 186
+        Y: 30
+        WIDTH: 116
+        HEIGHT: 24
+        FONT: roboto/Roboto-Medium.ttf
+        FONT_SIZE: 16
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+    WeatherFeels:
+      TEXT:
+        SHOW: True
+        X: 186
+        Y: 56
+        WIDTH: 116
+        HEIGHT: 22
+        FONT: roboto/Roboto-Regular.ttf
+        FONT_SIZE: 15
+        FONT_COLOR: 110, 144, 168
+        BACKGROUND_IMAGE: background.png
+
+    WeatherRange:
+      TEXT:
+        SHOW: True
+        X: 320
+        Y: 28
+        WIDTH: 132
+        HEIGHT: 28
+        ANCHOR: rt
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 20
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+    WeatherRain:
+      TEXT:
+        SHOW: True
+        X: 320
+        Y: 58
+        WIDTH: 132
+        HEIGHT: 22
+        ANCHOR: rt
+        FONT: roboto/Roboto-Medium.ttf
+        FONT_SIZE: 15
+        FONT_COLOR: 45, 164, 232
+        BACKGROUND_IMAGE: background.png
+
+    # ---------- zone 2 : next event ----------
+    NextEventTitle:
+      TEXT:
+        SHOW: True
+        X: 28
+        Y: 140
+        WIDTH: 424
+        HEIGHT: 40
+        FONT: malgun/malgunbd.ttf
+        FONT_SIZE: 28
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+    NextEventWhen:
+      TEXT:
+        SHOW: True
+        X: 28
+        Y: 188
+        WIDTH: 200
+        HEIGHT: 32
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 22
+        FONT_COLOR: 110, 144, 168
+        BACKGROUND_IMAGE: background.png
+
+    NextEventCountdown:
+      TEXT:
+        SHOW: True
+        X: 280
+        Y: 186
+        WIDTH: 172
+        HEIGHT: 34
+        ANCHOR: rt
+        FONT: jetbrains-mono/JetBrainsMono-Bold.ttf
+        FONT_SIZE: 26
+        FONT_COLOR: 45, 164, 232
+        BACKGROUND_IMAGE: background.png
+
+    # ---------- zone 3 : later ----------
+    LaterEvent1:
+      TEXT:
+        SHOW: True
+        X: 28
+        Y: 260
+        WIDTH: 424
+        HEIGHT: 22
+        FONT: malgun/malgun.ttf
+        FONT_SIZE: 16
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+    LaterEvent2:
+      TEXT:
+        SHOW: True
+        X: 28
+        Y: 288
+        WIDTH: 424
+        HEIGHT: 22
+        FONT: malgun/malgun.ttf
+        FONT_SIZE: 16
+        FONT_COLOR: 110, 144, 168
+        BACKGROUND_IMAGE: background.png

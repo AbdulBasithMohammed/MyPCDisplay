@@ -1,0 +1,46 @@
+---
+# Screens shown on the panel, in cycle order.
+# `theme` is a folder name under res/themes/.
+screens:
+  - name: Deck
+    theme: DeckWhiteBlue
+  - name: Detail
+    theme: DeckDetail
+  - name: Agenda
+    theme: DeckAgenda
+  - name: Voice
+    theme: DeckVoice
+  - name: League
+    theme: DeckLeague
+
+# Screen to show at startup (0 = the first entry above).
+start_screen: 0
+
+# Pause between the old display process exiting and the new one opening the COM
+# port, in seconds. Measured release time on this hardware is ~3 ms
+# (tools/measure_com_release.py), so the 0.05 default is a large margin. Raise
+# it only if log.log shows "Cannot open COM port" right after a switch.
+com_settle_seconds: 0.05
+
+# Jump to the League screen on its own when a match starts. The game only
+# serves its Live Client API while you are actually in a game, so that is the
+# signal. `return_after` puts the previous screen back when the match ends -
+# unless you changed screens by hand meanwhile, in which case you are left
+# where you put yourself.
+auto_switch:
+  enabled: true
+  on_league_match: true
+  screen: League
+  return_after: true
+
+# Global hotkeys. Format: "KEY" or "MOD+MOD+KEY".
+#   modifiers : CTRL, ALT, SHIFT, WIN
+#   keys      : PGUP, PGDN, HOME, END, F1..F24, LEFT, RIGHT, UP, DOWN, 0-9, A-Z
+#
+# NOTE: these are registered system-wide, so a bare key is claimed globally and
+# will no longer reach any other application. PGUP/PGDN with no modifier means
+# Page Up/Page Down stop scrolling in browsers, editors and PDF readers.
+# If that becomes annoying, change these to "ALT+PGUP" / "ALT+PGDN".
+hotkeys:
+  prev_screen: PGUP
+  next_screen: PGDN

@@ -1,0 +1,42 @@
+---
+# Settings for the Agenda screen (weather + calendar).
+# This file may contain a private calendar URL, so it is git-ignored.
+
+weather:
+  # A city name is enough - it is geocoded once and cached next to this file.
+  # Use "City, Country" if the name is ambiguous, e.g. "Cambridge, GB".
+  location: "London"
+  units: metric          # metric (C) or imperial (F)
+
+calendar:
+  # Google Calendar -> Settings -> (your calendar) -> "Secret address in iCal format"
+  # Outlook -> Calendar -> Share -> Publish -> ICS link
+  # Paste that URL here. Leave empty to hide the calendar rows.
+  #
+  # Treat it like a password: anyone with this URL can read your calendar.
+  ics_url: ""
+  # How far ahead to look, and how many events to list.
+  days_ahead: 7
+
+discord:
+  # Discord Developer Portal -> your application
+  #   client_id     : Application ID (public)
+  #   client_secret : OAuth2 -> Client Secret (treat like a password)
+  # Reading voice state needs the rpc.voice.read scope, which is owner/tester
+  # only unless the app is approved - your own app on your own account is fine.
+  client_id: ""
+  client_secret: ""
+
+league:
+  # Build orders are scraped from op.gg (one request per champion+role per day,
+  # cached on disk). Set false to use league_builds.yaml only - no network.
+  use_opgg: true
+
+  # Per-champion overrides, applied before league_builds.yaml. Anything here
+  # survives reinstalling the app, unlike edits to league_builds.yaml itself.
+  # Only used when use_opgg is false or op.gg cannot be reached.
+  builds: {}
+    # Jinx:
+    #   - Doran's Bow
+    #   - Berserker's Greaves
+    #   - Infinity Edge

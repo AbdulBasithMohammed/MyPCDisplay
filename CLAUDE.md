@@ -1,0 +1,169 @@
+# Working on this repo
+
+A fork of [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python)
+driving a 3.5" Turing panel (revision A, COM3, 480×320) as a desk dashboard.
+[README.md](README.md) is the overview, [DECK.md](DECK.md) the deep reference.
+This file is the things that will waste your time if you do not know them.
+
+---
+
+## Environment traps
+
+### `%LOCALAPPDATA%` is redirected — installs there do not reach the real disk
+
+Claude Code runs in a packaged (MSIX) container here. `AppData\Local` is
+redirected into
+`C:\Users\Admin\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\`.
+
+This silently broke the app for a full day. `tools/install_standalone.ps1`
+appeared to succeed every time, and the deck ran fine — **because it was launched
+from inside the container**. After a reboot the logon task, which Task Scheduler
+runs *outside* the container, got `0x80070002` FILE_NOT_FOUND and nothing
+started.
+
+**Comparing file timestamps across the two paths does not detect this** — both
+resolve to the same file, so they look identical. That comparison was made, and
+led to the wrong conclusion that the paths were the same folder. Use a marker:
+
+```bash
+echo x > /c/Users/Admin/AppData/Local/TuringDeck/__t.txt
+find /c/Users/Admin/AppData/Local/Packages/Claude_*/LocalCache -name __t.txt
+```
+
+What is **real and writable**: the repo, `Desktop`, `C:\Users\Admin\*`, and
+`AppData\Roaming` (so the Startup folder works). Only `AppData\Local` is
+redirected.
+
+**Consequence: the deck runs from the repo, not from an install directory.**
+Do not "fix" this by reinstating a `%LOCALAPPDATA%` install unless the user runs
+the installer themselves.
+
+### What a Claude Code shell cannot do here
+
+| Action | Result |
+|---|---|
+| Stop the running deck | **Access denied** — it runs elevated |
+| Register a task at `RunLevel Highest` | **Access denied** |
+| Write real `%LOCALAPPDATA%` | Silently redirected |
+| Register a task at `RunLevel Limited` | works |
+| Write HKCU `Run`, Startup folder, Desktop | works |
+
+`Get-Process | ... $_.Path` returns **empty** for elevated processes rather than
+erroring, and `$p.Handle` can succeed even when you cannot terminate the
+process. Neither is a valid elevation test — try `Stop-Process -ErrorAction Stop`
+and read the error, or check whether `Win32_Process.CommandLine` is null.
+
+Anything needing elevation must be handed to the user as a command, or run via
+`Start-Process -Verb RunAs` (which raises a UAC prompt they must accept — do not
+do that while they are in a game).
+
+---
+
+## Local modifications to upstream files
+
+These are edits inside files that came from upstream, so **a `git pull` can
+revert them**. Each is marked `LOCAL MODIFICATION` in-place. If a screen suddenly
+goes blank or a value reads wrong after syncing upstream, check here first.
+
+| File | Change | Why |
+|---|---|---|
+| `library/stats.py` | `_thresholded_color` parses numbers out of strings | Upstream assumes a float; custom sensors return text like `"41°C"` |
+| `library/stats.py` | CPU temp guard is `isnan(t) or t <= 0` | LHM returns 0.0 when the driver is blocked; 0 °C is not a reading |
+| `library/stats.py` | custom-sensor loop uses `continue`, not `return` | Upstream aborts the whole loop on one bad sensor, blanking every element after it |
+| `library/stats.py` | `BITMAP` element + `display_themed_bitmap` | Lets a sensor drive an image; the League screen composites its own frame |
+| `library/lcd/lcd_comm.py` | radial text centres on `text.strip()` | `min_size` padding was counted by `getbbox`, so percentages sat off-centre |
+| `main.py` | `DECK_CHILD=1` suppresses the tray icon | The supervisor owns the tray; the child must not create a second one |
+
+---
+
+## Architecture
+
+```
+deck.py            tray icon, global hotkeys, supervises main.py as a child
+  └── main.py      upstream render loop; reads THEME from config.yaml
+        └── library/sensors/sensors_custom.py   custom sensors (see its CLAUDE.md)
+```
+
+Switching screens **rewrites `THEME` in config.yaml and restarts the child**. It
+looks heavy-handed, and it is deliberate: `scheduler.py` reads refresh intervals
+from `THEME_DATA` at *import* time and its `STOPPING` flag is one-way, so
+swapping themes in-process needs `importlib.reload()` gymnastics. Restarting a
+child is simpler and isolates crashes.
+
+**Do not "optimise" this into in-process switching.** It was measured: the
+restart costs ~400 ms of interpreter startup out of a ~1.8 s switch. The
+dominant cost is ~1.3 s transmitting the background over a 229 KB/s serial link,
+which no architecture change touches.
+
+### Switch cost, measured
+
+| Phase | Time |
+|---|---|
+| Terminate child | ~30 ms |
+| COM settle (`com_settle_seconds`) | 50 ms |
+| Python start + imports | ~400 ms |
+| Transmit 480×320 background | ~1310 ms |
+
+The settle was a guessed 600 ms — a quarter of every switch — until
+`tools/measure_com_release.py` showed the port is reusable **2.9 ms** after the
+owner exits (n=10, max 3.1 ms). Kill-to-spawn went 607 ms → 55 ms.
+
+---
+
+## Testing without the hardware
+
+Nothing here needs the panel plugged in.
+
+```bash
+venv/Scripts/python.exe preview-theme.py DeckLeague 15   # renders screencap.png
+venv/Scripts/python.exe tools/league_selftest.py         # every League phase
+venv/Scripts/python.exe tools/check_league_builds.py     # item names vs live patch
+```
+
+`TURING_LEAGUE_DEMO=1` fills the League screen with a fabricated match, so the
+preview shows real content instead of "No match".
+
+The League screen also has live introspection worth using before guessing:
+
+```bash
+venv/Scripts/python.exe -c "from library.sensors.league import gameflow_phase, champ_select; print(gameflow_phase(), champ_select())"
+```
+
+---
+
+## Settled findings — do not re-investigate
+
+Each of these cost real time. They are conclusions, not guesses.
+
+- **LibreHardwareMonitor cannot read this CPU.** WinRing0 is on Microsoft's
+  vulnerable-driver blocklist and HVCI is on, so LHM returns 0.0 — *not* NaN,
+  which is why the "sensor missing" warning never fires. The user has said
+  Memory Integrity stays on.
+- **PyInstaller output will not launch.** Smart App Control blocks unsigned
+  binaries. `turing-deck.spec` is kept only as a record. The user has said Smart
+  App Control stays on.
+- **No free API gives League build recommendations.** Data Dragon `recommended`
+  and Community Dragon `recommendedItemDefaults` are both empty; both verified.
+  Riot's Match API needs a key that expires every 24 h.
+- **`stats2.u.gg` answers 403 behind a Cloudflare challenge.** Do not attempt to
+  work around bot protection. op.gg serves the same data in server-rendered HTML
+  with no challenge, so that is what is parsed.
+- **op.gg has no JSON API.** It is Next.js server components; the ids are in the
+  page HTML. A plain `requests` call is enough — no browser at runtime.
+
+---
+
+## Conventions
+
+- Comments explain **why**, not what. Several comments here exist purely to stop
+  a future change from re-introducing a bug that has already been fixed once.
+- Match the surrounding style: this codebase uses `%`-formatting and plain
+  `try/except` in sensor code because it runs inside a render loop that must
+  never raise.
+- When a fix is based on a measurement, **put the number in the comment**
+  (`com_settle_seconds`, the throughput figures). It stops the next person
+  re-deriving it, and flags when it stops being true.
+- Verify before asserting. Several bugs in this project's history came from
+  inferring success rather than checking — a silently-empty parse section, an
+  install that "succeeded" into a sandbox, a driver assumed loaded. Run the
+  check.

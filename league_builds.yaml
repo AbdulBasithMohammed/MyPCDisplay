@@ -1,0 +1,223 @@
+---
+# Build orders for the League screen.
+#
+# WHY THIS FILE EXISTS
+#   Riot no longer publishes recommended builds: Data Dragon's `recommended`
+#   block and Community Dragon's `recommendedItemDefaults` are both empty, and
+#   the sites that derive builds from win rates (op.gg, u.gg, lolalytics) sit
+#   behind bot protection. So the ordering below is a plain editable file
+#   rather than something fetched.
+#
+# HOW IT IS USED
+#   The screen walks the list, skips anything already in your inventory, and
+#   shows the first item you still need - then works down that item's build
+#   tree to name the component to buy right now.
+#
+#   Names must match the in-game shop exactly. Run
+#       venv/Scripts/python.exe tools/check_league_builds.py
+#   to verify every name against the current patch; it prints anything it
+#   cannot resolve and suggests near matches.
+#
+# EDITING
+#   Add or reorder freely. Entries here are overwritten when the app is
+#   reinstalled - to keep personal changes across updates, put them in
+#   services.yaml under `league: builds:` instead, which is preserved.
+
+# Used when a champion has no entry below. Picked by the champion's own
+# attack/magic rating so an unlisted pick still shows something sensible.
+defaults:
+  ad:
+    - Doran's Blade
+    - Berserker's Greaves
+    - Kraken Slayer
+    - Infinity Edge
+    - Lord Dominik's Regards
+    - Bloodthirster
+  ap:
+    - Doran's Ring
+    - Sorcerer's Shoes
+    - Luden's Echo
+    - Rabadon's Deathcap
+    - Void Staff
+    - Zhonya's Hourglass
+
+builds:
+  # ---------------- marksmen ----------------
+  Jinx:
+    - Doran's Blade
+    - Berserker's Greaves
+    - Kraken Slayer
+    - Infinity Edge
+    - Lord Dominik's Regards
+    - Bloodthirster
+  Caitlyn:
+    - Doran's Blade
+    - Berserker's Greaves
+    - Infinity Edge
+    - Rapid Firecannon
+    - Lord Dominik's Regards
+    - Bloodthirster
+  Ashe:
+    - Doran's Blade
+    - Berserker's Greaves
+    - Kraken Slayer
+    - Runaan's Hurricane
+    - Infinity Edge
+    - Lord Dominik's Regards
+  Vayne:
+    - Doran's Blade
+    - Berserker's Greaves
+    - Blade of The Ruined King
+    - Guinsoo's Rageblade
+    - Lord Dominik's Regards
+    - Guardian Angel
+  Ezreal:
+    - Doran's Blade
+    - Berserker's Greaves
+    - Essence Reaver
+    - Manamune
+    - Lord Dominik's Regards
+    - Guardian Angel
+  Kai'Sa:
+    - Doran's Blade
+    - Berserker's Greaves
+    - Kraken Slayer
+    - Guinsoo's Rageblade
+    - Infinity Edge
+    - Bloodthirster
+
+  # ---------------- mages ----------------
+  Lux:
+    - Doran's Ring
+    - Sorcerer's Shoes
+    - Luden's Echo
+    - Rabadon's Deathcap
+    - Horizon Focus
+    - Void Staff
+  Ahri:
+    - Doran's Ring
+    - Sorcerer's Shoes
+    - Luden's Echo
+    - Rabadon's Deathcap
+    - Zhonya's Hourglass
+    - Void Staff
+  Veigar:
+    - Doran's Ring
+    - Sorcerer's Shoes
+    - Blackfire Torch
+    - Rabadon's Deathcap
+    - Zhonya's Hourglass
+    - Void Staff
+  Syndra:
+    - Doran's Ring
+    - Sorcerer's Shoes
+    - Luden's Echo
+    - Rabadon's Deathcap
+    - Zhonya's Hourglass
+    - Void Staff
+  Brand:
+    - Doran's Ring
+    - Sorcerer's Shoes
+    - Liandry's Torment
+    - Rabadon's Deathcap
+    - Zhonya's Hourglass
+    - Void Staff
+
+  # ---------------- assassins ----------------
+  Zed:
+    - Long Sword
+    - Ionian Boots of Lucidity
+    - Eclipse
+    - Youmuu's Ghostblade
+    - Edge of Night
+    - Serylda's Grudge
+  Katarina:
+    - Doran's Ring
+    - Sorcerer's Shoes
+    - Hextech Gunblade
+    - Rabadon's Deathcap
+    - Zhonya's Hourglass
+    - Void Staff
+  Talon:
+    - Long Sword
+    - Ionian Boots of Lucidity
+    - Eclipse
+    - Youmuu's Ghostblade
+    - Edge of Night
+    - Serylda's Grudge
+
+  # ---------------- fighters ----------------
+  Garen:
+    - Doran's Blade
+    - Plated Steelcaps
+    - Black Cleaver
+    - Death's Dance
+    - Sterak's Gage
+    - Guardian Angel
+  Darius:
+    - Doran's Blade
+    - Plated Steelcaps
+    - Black Cleaver
+    - Sterak's Gage
+    - Death's Dance
+    - Guardian Angel
+  Jax:
+    - Doran's Blade
+    - Plated Steelcaps
+    - Blade of The Ruined King
+    - Sterak's Gage
+    - Death's Dance
+    - Guardian Angel
+  Yasuo:
+    - Doran's Blade
+    - Berserker's Greaves
+    - Infinity Edge
+    - Bloodthirster
+    - Lord Dominik's Regards
+    - Guardian Angel
+
+  # ---------------- tanks ----------------
+  Malphite:
+    - Doran's Shield
+    - Plated Steelcaps
+    - Sunfire Aegis
+    - Thornmail
+    - Spirit Visage
+    - Warmog's Armor
+  Leona:
+    - Doran's Shield
+    - Plated Steelcaps
+    - Locket of the Iron Solari
+    - Thornmail
+    - Spirit Visage
+    - Warmog's Armor
+  Ornn:
+    - Doran's Shield
+    - Plated Steelcaps
+    - Sunfire Aegis
+    - Thornmail
+    - Spirit Visage
+    - Force of Nature
+
+  # ---------------- supports ----------------
+  Thresh:
+    - World Atlas
+    - Mercury's Treads
+    - Locket of the Iron Solari
+    - Knight's Vow
+    - Spirit Visage
+    - Warmog's Armor
+  Nami:
+    - World Atlas
+    - Ionian Boots of Lucidity
+    - Moonstone Renewer
+    - Ardent Censer
+    - Mikael's Blessing
+    - Echoes of Helia
+  Soraka:
+    - World Atlas
+    - Ionian Boots of Lucidity
+    - Moonstone Renewer
+    - Ardent Censer
+    - Mikael's Blessing
+    - Echoes of Helia
