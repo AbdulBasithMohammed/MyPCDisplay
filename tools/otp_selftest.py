@@ -31,6 +31,10 @@ CORPUS = [
     ("Sign in to Acme", "Your one-time code is 823 114.", "accounts@acme.io", True),
     ("", "Your two-factor authentication code is 77213908.", "auth@bank.com", True),
     ("Acme security", "Use passcode 5521 to finish signing in.", "x@acme.io", True),
+    ("Security code for your application to Lyft",
+     "Copy and paste this code into the security code field on your "
+     "application:\nN6Ek26wS\nAfter you enter the code, resubmit.",
+     "Greenhouse <no-reply@us.greenhouse-mail.io>", True),
     ("Your order 4190220 has shipped",
      "Tracking number 992481. Delivery Tuesday.", "ship@amazon.com", False),
     ("Receipt from Acme",

@@ -41,12 +41,15 @@ log = logging.getLogger(__name__)
 
 # A code token: 4-8 alphanumerics, or the "123-456" form some services use.
 # The lookarounds stop us slicing a short run out of a long account number.
-# Alphanumeric codes must contain a digit (checked below), or every capitalised
-# word in a subject line - FREE, SALE, HTTP - becomes a candidate.
+# Alphanumeric codes must contain a digit (checked below), or every word of
+# 4-8 letters becomes a candidate. The alphanumeric branch accepts BOTH cases:
+# Greenhouse sends codes like N6Ek26wS, and an uppercase-only pattern never
+# even produced a candidate for it - the miss surfaced on a real application
+# email whose best-scoring token was Greenhouse's zip code.
 CODE_RE = re.compile(r"(?<![A-Za-z0-9])("
                      r"[0-9]{3}[-\s][0-9]{3}"     # 123-456 / 123 456
                      r"|[0-9]{4,8}"               # 419022
-                     r"|[A-Z0-9]{4,8}"            # G4X9A2
+                     r"|[A-Za-z0-9]{4,8}"         # G4X9A2, N6Ek26wS
                      r")(?![A-Za-z0-9])")
 
 # Phrases that mean "the number next to me is a credential".
@@ -173,6 +176,14 @@ def _score(token, low, start, end, in_subject, sender):
     elif len(digits) in (4, 5, 7, 8):
         score += 1
         why.append("%dd" % len(digits))
+    elif (re.search(r"[a-z]", token) and re.search(r"[A-Z]", token)
+          and re.search(r"[0-9][A-Za-z]", token)):
+        # Mixed case with a digit somewhere BEFORE the last letter (N6Ek26wS)
+        # is the shape of a generated token. A word with digits stuck on the
+        # end - SAVE20, iPhone17 - never has a digit followed by more letters,
+        # so product names and promo codes do not collect this bonus.
+        score += 2
+        why.append("mixed-case")
 
     if re.search(r"(?i)(no-?reply|do-?not-?reply|verify|security|account|auth)",
                  sender or ""):

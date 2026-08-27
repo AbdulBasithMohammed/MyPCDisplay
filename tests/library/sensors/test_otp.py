@@ -20,6 +20,15 @@ POSITIVE = [
     ("Verify your email", "Your confirmation code: 90210-", "no-reply@shop.com", "90210"),
     ("", "Your two-factor authentication code is 77213908.", "auth@bank.com", "77213908"),
     ("Your code is G4X9A2", "", "no-reply@svc.com", "G4X9A2"),
+    # Real miss from the field: Greenhouse issues MIXED-case codes, and an
+    # uppercase-only token pattern never produced a candidate - the best
+    # scorer output for this email was Greenhouse's zip code, at 3.
+    ("Security code for your application to Lyft",
+     "Hi Abdul,\nCopy and paste this code into the security code field on "
+     "your application:\nN6Ek26wS\nAfter you enter the code, resubmit your "
+     "application.\n(c) 2026 Greenhouse\n18 West 18th Street, 11th Floor, "
+     "New York, NY 10011, USA",
+     "Greenhouse <no-reply@us.greenhouse-mail.io>", "N6Ek26wS"),
 ]
 
 # These must return None. Each is a shape that fooled an earlier iteration.
@@ -36,6 +45,11 @@ NEGATIVE = [
      "Amount due 4500.00, account number 88213004.", "billing@utility.com"),
     ("Meeting notes",
      "Call me on 5551234 when you get a chance.", "colleague@work.com"),
+    # Digits-on-the-end tokens are product names and promo codes, not
+    # generated secrets; the mixed-case bonus must not resurrect them.
+    ("Security update available",
+     "Verify you are ready: iPhone17 ships with the update built in.",
+     "news@apple.com"),
 ]
 
 
