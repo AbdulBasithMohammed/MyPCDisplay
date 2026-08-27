@@ -13,6 +13,7 @@ import email
 import email.utils
 import logging
 import re
+import socket
 import threading
 import time
 
@@ -62,9 +63,35 @@ class Dispatcher:
 # the wire and hold in memory for nothing.
 FETCH_OCTETS = 16384
 
-# Re-issue IDLE well inside the 30 minute limit RFC 2177 suggests servers
-# enforce; Gmail drops idle connections at roughly that mark.
-IDLE_REFRESH = 840
+# How long one IDLE cycle lasts before DONE re-asserts the connection.
+#
+# RFC 2177 allows up to 29 minutes, but the constraint on this network is not
+# the RFC: an idle connection dies silently in under 14 minutes (measured -
+# deck.log 2026-08-26 22:47-22:48 shows one connection reset the moment its
+# 840s timer sent DONE, and another blackholed so completely that only the
+# read timeout noticed). Each DONE/IDLE/SEARCH cycle moves real bytes in both
+# directions, which is what keeps a NAT mapping alive, so the refresh doubles
+# as the keepalive. 240s also bounds the damage if a middlebox ever swallows
+# an EXISTS: the end-of-cycle scan catches the mail at most 4 minutes late.
+IDLE_REFRESH = 240
+
+
+def _enable_keepalive(sock):
+    """Ask TCP itself to keep the connection warm and to notice death.
+
+    The IDLE protocol can go minutes with no traffic, and this network's NAT
+    was observed dropping idle mappings inside 14 minutes. OS-level keepalives
+    every 30s keep the mapping refreshed between IDLE cycles, and turn a
+    silently dead link into a prompt socket error instead of a read that
+    hangs until the safety-net timeout.
+    """
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        if hasattr(socket, "SIO_KEEPALIVE_VALS"):
+            # Windows: (on, idle ms before first probe, ms between probes)
+            sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 30000, 5000))
+    except Exception:
+        pass
 
 
 def idle_wait(imap, refresh):
@@ -74,10 +101,10 @@ def idle_wait(imap, refresh):
     the read time out. An SSL socket read that times out poisons the
     connection - every read after it raises "cannot read from timed out
     object" - and an earlier version used exactly that as its refresh
-    mechanism, tearing down and rebuilding all three connections every 14
-    quiet minutes; any code arriving during a rebuild was skipped. With DONE
-    doing the ending, the reader always sees a complete tagged line and the
-    connection stays healthy across refreshes.
+    mechanism, tearing down and rebuilding all three connections every cycle;
+    any code arriving during a rebuild was skipped. With DONE doing the
+    ending, the reader always sees a complete tagged line and the connection
+    stays healthy across refreshes.
 
     The one socket timeout kept is a dead-link safety net at refresh+60s. If
     it ever fires, DONE went unanswered for a minute, the session is being
@@ -90,7 +117,17 @@ def idle_wait(imap, refresh):
     tag = imap._new_tag()
     imap.sock.settimeout(refresh + 60)
     imap.send(b"%s IDLE\r\n" % tag)
-    if not imap.readline().startswith(b"+"):
+
+    # An untagged line can already be sitting in the buffer from before IDLE -
+    # an EXISTS that raced the previous cycle's DONE, say. That is pending
+    # activity, not a refusal, so it must not be mistaken for the greeting.
+    activity = False
+    line = imap.readline()
+    while line.startswith(b"*"):
+        if b"EXISTS" in line or b"RECENT" in line:
+            activity = True
+        line = imap.readline()
+    if not line.startswith(b"+"):
         imap.tagged_commands.pop(tag, None)
         raise RuntimeError("server did not accept IDLE")
 
@@ -112,7 +149,8 @@ def idle_wait(imap, refresh):
     timer = threading.Timer(refresh, send_done)
     timer.daemon = True
     timer.start()
-    activity = False
+    if activity:
+        send_done()       # mail was already waiting; end this cycle at once
     try:
         while True:
             line = imap.readline()
@@ -201,7 +239,7 @@ class MailWatcher(threading.Thread):
         # across reconnects so a dropped connection does not lose messages.
         self._last_uid = None
         self.poll_seconds = int(cfg.get("poll_seconds") or 15)
-        self.max_age = int(cfg.get("max_age_seconds") or 180)
+        self.max_age = int(cfg.get("max_age_seconds") or 300)
 
     def stop(self):
         self._stop.set()
@@ -249,7 +287,10 @@ class MailWatcher(threading.Thread):
         port = int(self.cfg.get("port") or 993)
         folder = self.cfg.get("folder") or "INBOX"
 
-        imap = imaplib.IMAP4_SSL(host, port)
+        # The 30s timeout stops a half-open connect from hanging a watcher
+        # forever; it is replaced by idle_wait's own budget once idling.
+        imap = imaplib.IMAP4_SSL(host, port, timeout=30)
+        _enable_keepalive(imap.sock)
         try:
             imap.login(self.cfg["user"], self.cfg["app_password"])
             imap.select(folder)
@@ -281,6 +322,21 @@ class MailWatcher(threading.Thread):
                 self._use_idle = False
 
             while not self._stop.is_set():
+                # Scan FIRST, wait second. On a fresh session after a
+                # reconnect this is what picks up anything that arrived while
+                # the connection was down - waiting first would sit in IDLE
+                # for a full cycle with the backlog already in the mailbox,
+                # because IDLE only announces arrivals, never existing mail.
+                typ, data = imap.uid("SEARCH", None, "UID %d:*" % (last + 1))
+                if typ == "OK" and data and data[0]:
+                    # "UID n:*" always returns at least one message even when
+                    # nothing is new, so the uid has to be re-checked here.
+                    uids = [u for u in data[0].split() if int(u) > last]
+                    if uids:
+                        last = max(int(u) for u in uids)
+                        self._last_uid = last     # survives a reconnect
+                        self._scan(imap, uids)
+
                 if self._use_idle:
                     try:
                         idle_wait(imap, IDLE_REFRESH)
@@ -293,22 +349,8 @@ class MailWatcher(threading.Thread):
                         log.warning("[%s] IDLE refused (%s); polling every %ds",
                                     self.label, e, self.poll_seconds)
                         self._use_idle = False
-                else:
-                    if self._stop.wait(self.poll_seconds):
-                        break
-                    imap.noop()
-
-                typ, data = imap.uid("SEARCH", None, "UID %d:*" % (last + 1))
-                if typ != "OK" or not data or not data[0]:
-                    continue
-                # "UID n:*" always returns at least one message even when
-                # nothing is new, so the uid has to be re-checked here.
-                uids = [u for u in data[0].split() if int(u) > last]
-                if not uids:
-                    continue
-                last = max(int(u) for u in uids)
-                self._last_uid = last     # survives a reconnect
-                self._scan(imap, uids)
+                elif self._stop.wait(self.poll_seconds):
+                    break
         finally:
             try:
                 imap.logout()
@@ -318,10 +360,19 @@ class MailWatcher(threading.Thread):
     def run(self):
         backoff = 5
         while not self._stop.is_set():
+            started = time.time()
             try:
                 self._session()
                 backoff = 5
             except Exception as e:
+                # A session that ran for a while before failing was healthy;
+                # only consecutive quick failures - bad password, server
+                # refusing us - should escalate the backoff. Without this the
+                # backoff only ever grew (sessions never return normally), and
+                # the log filled with "retrying in 300s": five-minute windows
+                # in which an arriving code was invisible.
+                if time.time() - started > 120:
+                    backoff = 5
                 log.warning("[%s] mail watcher: %s; reconnecting in %ds",
                             self.label, e, backoff)
                 if self._stop.wait(backoff):

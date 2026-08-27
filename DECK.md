@@ -334,9 +334,10 @@ venv/Scripts/python.exe tools/otp_selftest.py --imap
 Every mailbox is checked even after one fails, so a single bad password does not
 hide a second one behind it.
 
-Delivery uses IMAP **IDLE**, so a code lands on the panel a second or two after
-it arrives. If the server refuses IDLE the watcher falls back to polling every
-`poll_seconds` and says so in `deck.log`.
+Delivery uses IMAP **IDLE**. Expect a code on the panel within ~30s of the
+mail arriving: Gmail batches IDLE notifications by about 25 seconds
+(measured), and the screen switch adds ~2s. If the server refuses IDLE the
+watcher falls back to polling every `poll_seconds` and says so in `deck.log`.
 
 ### Windows notifications
 
@@ -501,13 +502,22 @@ gives you the elevated variant, at the cost of one UAC prompt.
 quickest way to see errors - `deck.py` swallows them into `deck.log` by design.
 Exit the deck from its tray icon first, or the COM port will be busy.
 
-**OTP screen stopped appearing?** Check `deck.log` for
-`mail watcher: cannot read from timed out object`. That was a real bug, fixed:
-IDLE used to be ended by a socket read timing out, which poisons an SSL
-connection, so every mailbox rebuilt itself every 14 minutes and any code
-arriving during a rebuild was missed. If you see it again on a newer Python,
-the culprit is `idle_wait()` in `library/sensors/otp_sources.py` - it must end
-IDLE by sending `DONE`, never by letting the read expire.
+**OTP screen stopped appearing?** Check `deck.log` for the mail watchers.
+Occasional `reconnecting in 5s` lines are normal - the network drops idle
+connections and the watcher resumes from where it stopped, so nothing is
+lost. Two failure shapes have actually happened and are guarded against:
+
+- `cannot read from timed out object`: IDLE was once ended by a socket read
+  timing out, which poisons an SSL connection. `idle_wait()` must end IDLE by
+  sending `DONE`, never by letting the read expire.
+- Codes silently missing with a clean log: this network kills idle TCP
+  connections inside 14 minutes, and a dead connection never receives the
+  EXISTS. That is why `IDLE_REFRESH` is 240s and TCP keepalives run every
+  30s - do not "optimise" the refresh back up toward the RFC's 29 minutes.
+
+Expect a code to take up to ~30s to appear even when everything is healthy:
+Gmail batches IDLE notifications by about 25 seconds, which is a floor no
+change on our side can lower.
 
 **Panel unplugged?** Nothing to do. The child fails to open COM3, and the
 watchdog retries with backoff up to 60s, so reconnecting the panel brings the

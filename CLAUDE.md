@@ -189,6 +189,22 @@ Each of these cost real time. They are conclusions, not guesses.
   re-read the mailbox tip. Re-reading the tip discards anything that arrived
   while the connection was down. `max_age_seconds` is what stops a resumed
   watcher acting on stale mail.
+- **This network silently kills idle TCP connections in under 14 minutes.**
+  Measured, not inferred: deck.log 2026-08-26 22:47-22:48 shows one IMAP
+  connection reset (`WinError 10054`) at the exact moment its 840s IDLE timer
+  sent DONE, and a second blackholed so completely that only the read timeout
+  noticed - the EXISTS for a message APPENDed mid-idle never arrived, while an
+  identical fresh connection received it in 24s. Fixing the SSL-timeout bug
+  *exposed* this: the old bug's teardown-every-cycle had been an accidental
+  NAT keepalive. Defenses now: `IDLE_REFRESH = 240` (each DONE/IDLE/SEARCH
+  cycle moves bytes both ways), TCP keepalives every 30s
+  (`SIO_KEEPALIVE_VALS`), and the session loop scans *before* idling so a
+  reconnect catches the backlog immediately. Do not raise `IDLE_REFRESH` back
+  toward the RFC's 29 minutes: the constraint is the NAT, not the RFC.
+- **Gmail batches IDLE notifications by ~25s.** An APPEND (and plausibly some
+  deliveries) reached an idling connection 24s after the fact (measured with
+  `scratchpad/idle_trace.py`-style raw tracing). Detection latency has this
+  floor regardless of anything on our side.
 - **`imaplib` has no `IDLE` support on Python 3.13.** `IMAP4.idle()` landed
   later, so `otp_sources.py` drives the protocol directly and degrades to
   polling on any failure rather than reconnect-looping.

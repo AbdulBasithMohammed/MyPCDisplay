@@ -135,3 +135,26 @@ def test_reconnect_resumes_from_last_processed_uid():
     w._last_uid = 8425
     # A second _session() must not reset this back to the current tip.
     assert w._last_uid == 8425
+
+
+def test_pending_exists_before_greeting_is_activity_not_refusal():
+    """An EXISTS buffered from before IDLE raced the previous cycle's DONE.
+
+    It must be reported as activity - the old check read the first line only,
+    mistook the untagged line for a refusal, and dropped to polling for the
+    whole session.
+    """
+    imap = FakeIMAP()
+    replies = [b"* 4231 EXISTS\r\n", b"+ idling\r\n"]
+    real_readline = FakeIMAP.readline
+
+    def readline(self=imap):
+        if replies:
+            self.reads += 1
+            return replies.pop(0)
+        return real_readline(self)
+
+    imap.readline = readline
+    assert idle_wait(imap, 30) is True, "buffered EXISTS is mail, not refusal"
+    assert any(b.startswith(b"DONE") for b in imap.sent), \
+        "pending mail must end the cycle immediately"

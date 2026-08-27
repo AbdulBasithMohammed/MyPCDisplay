@@ -66,7 +66,7 @@ otp:
     folder: INBOX
     # Ignore anything older than this on arrival, so a reconnect that hands us
     # a backlog cannot replay yesterday's codes onto the panel.
-    max_age_seconds: 180
+    max_age_seconds: 300
     # Only used if the server refuses IDLE; with IDLE a code appears in ~1s.
     poll_seconds: 15
     accounts:
