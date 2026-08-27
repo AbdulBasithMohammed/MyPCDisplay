@@ -35,6 +35,7 @@ Cycle with **Page Down** / **Page Up**, or pick one from the tray icon.
 | **Agenda** | Weather now/today, next calendar event with a live countdown, two after it |
 | **Voice** | Discord voice channel: who is in it, who is talking, who just joined |
 | **League** | Phase-driven build guide — see below |
+| **OTP** | A one-time passcode that just arrived — appears on its own, then leaves |
 
 The **League** screen changes with the state of the match, and switches itself on
 at champion lock-in:
@@ -48,6 +49,18 @@ at champion lock-in:
 
 Every option carries its **win rate and sample size**, because 60% over 290 games
 and 56% over 8,605 games are not the same recommendation.
+
+The **OTP** screen is not in the cycle. When a verification code arrives by
+email — or in a Windows notification, which is how a phone code gets here via
+Phone Link — the panel shows who sent it and the code itself for 30 seconds,
+then puts back whatever was there. **Page Up** or **Page Down** dismisses it
+early. Any number of mailboxes can be watched at once, each labelled so you
+can tell which inbox a code landed in. It is off until you add credentials;
+see [DECK.md](DECK.md#otp-screen-setup).
+
+Codes are matched by scoring, not by a bare six-digit regex: an intent phrase
+has to sit near the number, order numbers and prices score negative, and two
+equally plausible candidates show nothing rather than a guess.
 
 ## Running it
 

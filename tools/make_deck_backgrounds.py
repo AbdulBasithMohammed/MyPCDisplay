@@ -107,11 +107,49 @@ def build_voice():
     return img
 
 
+def build_otp():
+    """DeckOTP: one centred notification card, deliberately unlike the others.
+
+    This screen appears without being asked for, so it does not reuse the
+    three-card grid every other screen shares - the different shape is the
+    signal that something interrupted you, readable before you focus on it.
+    """
+    img = vertical_gradient((W, H), BG_TOP, BG_BOTTOM).convert("RGB")
+
+    card = (24, 40, 456, 280)
+    shadow = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(shadow).rounded_rectangle(
+        (card[0], card[1] + 4, card[2], card[3] + 6), 18, fill=90)
+    shadow = shadow.filter(ImageFilter.GaussianBlur(7))
+    img.paste(Image.new("RGB", (W, H), SHADOW), (0, 0), shadow)
+
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle(card, 18, fill=CARD, outline=CARD_EDGE, width=1)
+
+    # Accent stripe along the top edge of the card, clipped to the corner
+    # radius by redrawing the card's rounded outline over it.
+    stripe = Image.new("RGB", (W, H), CARD)
+    sdraw = ImageDraw.Draw(stripe)
+    sdraw.rounded_rectangle(card, 18, fill=ACCENT)
+    sdraw.rectangle((card[0], card[1] + 6, card[2], card[3]), fill=CARD)
+    mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(card, 18, fill=255)
+    img.paste(stripe, (0, 0), mask)
+    draw.rounded_rectangle(card, 18, outline=CARD_EDGE, width=1)
+
+    # Divider above the countdown row.
+    draw.line((48, 228, 432, 228), fill=CARD_EDGE, width=1)
+    # Groove the countdown bar drains along.
+    track(draw, 48, 244, 432, 250)
+    return img
+
+
 def main():
     for name, builder in (("DeckWhiteBlue", build_deck),
                           ("DeckDetail", build_detail),
                           ("DeckAgenda", build_agenda),
-                          ("DeckVoice", build_voice)):
+                          ("DeckVoice", build_voice),
+                          ("DeckOTP", build_otp)):
         out_dir = os.path.join(THEMES, name)
         os.makedirs(out_dir, exist_ok=True)
         out = os.path.join(out_dir, "background.png")

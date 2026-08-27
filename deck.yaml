@@ -12,6 +12,12 @@ screens:
     theme: DeckVoice
   - name: League
     theme: DeckLeague
+  # Pushed onto the panel when an OTP arrives, then taken away again. `hidden`
+  # keeps it out of the PgUp/PgDn rotation and the tray list, so you cannot
+  # cycle onto a stale code.
+  - name: OTP
+    theme: DeckOTP
+    hidden: true
 
 # Screen to show at startup (0 = the first entry above).
 start_screen: 0
@@ -32,6 +38,16 @@ auto_switch:
   on_league_match: true
   screen: League
   return_after: true
+
+# Show an arriving one-time passcode on the panel, then go back to whatever was
+# there. Sources and credentials are configured in services.yaml under `otp:`;
+# this block only controls the screen behaviour.
+#
+# While a code is showing, PgUp/PgDn dismiss it and return you where you were
+# rather than cycling onward.
+otp:
+  enabled: true
+  screen: OTP
 
 # Global hotkeys. Format: "KEY" or "MOD+MOD+KEY".
 #   modifiers : CTRL, ALT, SHIFT, WIN

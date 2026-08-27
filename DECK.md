@@ -26,6 +26,8 @@ Screens:
 - **League** - phase-driven: summoner spells and skill order once you lock in,
   starting items for the first three minutes, core build after that. Appears on
   its own at champion lock-in.
+- **OTP** - a verification code that just arrived. Not in the cycle: it appears
+  on its own and leaves on its own. See below.
 
 The two deliberately do not overlap: clock and uptime live only on Deck, so the
 Detail screen spends its space on things you cannot see anywhere else.
@@ -261,6 +263,149 @@ To override a build, put it in `services.yaml` under `league: builds:` - that
 file is preserved across reinstalls, `league_builds.yaml` is not. Setting
 `league: use_opgg: false` disables the network entirely and uses the local file.
 
+## OTP screen setup
+
+When a one-time passcode arrives, the panel shows who sent it and the code, for
+30 seconds, then puts back whatever screen was there. **Page Up** or **Page
+Down** dismisses it early and returns you where you were rather than cycling
+onward - either key, because when a code is up neither one means "next screen".
+
+Off until you configure a source. Everything lives in `services.yaml` under
+`otp:`; `deck.yaml` only holds the screen name and whether it is enabled.
+
+### Email
+
+Gmail needs an **App Password**, not your account password:
+
+1. Turn on 2-Step Verification on the Google account.
+2. Create an app password at <https://myaccount.google.com/apppasswords>.
+3. Put the 16-character value in `services.yaml`.
+
+You can watch **as many mailboxes as you like**. Each entry under `accounts:`
+gets its own thread and its own IMAP connection; keys set directly under
+`email:` are shared defaults that every account inherits and may override:
+
+```yaml
+otp:
+  email:
+    enabled: true
+    host: imap.gmail.com      # shared by every account below
+    port: 993
+    folder: INBOX
+    accounts:
+      - label: personal
+        user: "you@gmail.com"
+        app_password: "xxxx xxxx xxxx xxxx"
+      - label: work
+        user: "you@company.com"
+        host: outlook.office365.com   # overrides the shared default
+        app_password: "yyyy yyyy yyyy yyyy"
+```
+
+`label` is optional and appears on the panel next to EMAIL, so you can tell
+which inbox a code landed in. Omit it if you only watch one. A single mailbox
+can also be configured flat, with no `accounts:` list at all.
+
+The same code arriving in two watched inboxes interrupts the panel **once** -
+deduplication is shared across every source, mail and notifications alike.
+
+Treat each app password like a password: it grants read access to that mailbox.
+It is only ever sent to that account's `host`, and nothing here sends mail.
+Other providers work; set `host` and `port` to their IMAP endpoint.
+
+Measured cost, in the supervisor process (no extra process is created):
+
+| Part | RSS |
+|---|---|
+| 3 mailboxes on IMAP IDLE | +5.3 MB (~1.8 MB each) |
+| Toast notification watcher | +13.6 MB |
+
+The toast watcher is the expensive half - it pulls in the WinRT projection and
+an asyncio loop - and costs more than three mailboxes combined. Turn it off
+under `otp.notifications` if you only care about email.
+
+Check every configured mailbox without waiting for a real code - it logs in,
+selects the folder and reports IDLE support, reading no messages:
+
+```bash
+venv/Scripts/python.exe tools/otp_selftest.py --imap
+```
+
+Every mailbox is checked even after one fails, so a single bad password does not
+hide a second one behind it.
+
+Delivery uses IMAP **IDLE**, so a code lands on the panel a second or two after
+it arrives. If the server refuses IDLE the watcher falls back to polling every
+`poll_seconds` and says so in `deck.log`.
+
+### Windows notifications
+
+`otp.notifications.enabled` also scores Windows toasts, which is how a phone
+code arrives - Phone Link mirrors the message as a toast and it gets read like
+any other. Windows asks once for notification access.
+
+Verified working from an unpackaged Python process on this machine: the listener
+returns `Allowed`, and each toast carries its package family name, so filtering
+by source app is exact rather than title matching. Add app names or package
+families to `ignore_apps` to mute a noisy source.
+
+### How a code is recognised
+
+Not a bare six-digit regex - that matches order numbers, prices, years and
+tracking IDs. Candidates are scored and the best one has to clear a threshold:
+
+| Signal | Weight |
+|---|---|
+| Intent phrase within 45 characters ("verification code", "one-time password") | +5 |
+| ...within 120 characters | +3 |
+| Weak word nearby - covers "482913 is your Instagram code", where no phrase forms | +2 |
+| Found in the subject line | +2 |
+| Exactly six digits | +2 |
+| Sender looks like `no-reply@` / `security@` | +1 |
+| An order/invoice/tracking/promo word within 30 characters | -4 |
+| Looks like a year | -6 |
+| Currency symbol before it, or part of a grouped number | -5 |
+
+Two rules do most of the work in practice:
+
+- **Only arrivals are ever scored.** Nothing scans a mailbox, so the corpus is
+  "what landed in the last few minutes", which excludes almost all archive noise.
+  Mail older than `max_age_seconds` is ignored, so a reconnect that hands over a
+  backlog cannot replay yesterday's codes.
+- **Ambiguity shows nothing.** If the two best candidates differ and score within
+  2 of each other, the panel stays put. A missed code costs a glance at your
+  phone; a confidently wrong one costs a failed login.
+
+HTML mail is stripped of `<style>` blocks and URLs before scoring, because hex
+colours (`#4419af`) and tracking query strings both parse as valid six-character
+codes and would otherwise outnumber the real one.
+
+To see the scoring on your own mail shapes:
+
+```bash
+venv/Scripts/python.exe tools/otp_selftest.py
+```
+
+```bash
+venv/Scripts/python.exe tools/otp_selftest.py --text "Your code is 419022"
+```
+
+If something is missed or a false positive gets through, the weights are all in
+`library/sensors/otp.py` and `tools/otp_selftest.py` prints the reason each
+candidate scored what it did.
+
+### Worth knowing
+
+A code on a desk panel is readable by anyone in the room, and by any camera,
+screen share or stream pointed that way. Thirty seconds is short by design; set
+`hold_seconds` lower if that matters more than convenience.
+
+The IMAP connection lives in the **supervisor**, not the display child. The
+child is killed and respawned on every screen switch, so a connection held there
+would reconnect to Gmail every time you pressed Page Down. The supervisor writes
+`cache/otp_state.json` and the child reads it - which is also why the code
+survives the very switch that puts it on screen.
+
 ## Switching cost
 
 A switch kills the display child and starts a new one. Measured end to end:
@@ -355,6 +500,14 @@ gives you the elevated variant, at the cost of one UAC prompt.
 `start-monitor.bat` runs a single screen **with a visible console**, which is the
 quickest way to see errors - `deck.py` swallows them into `deck.log` by design.
 Exit the deck from its tray icon first, or the COM port will be busy.
+
+**OTP screen stopped appearing?** Check `deck.log` for
+`mail watcher: cannot read from timed out object`. That was a real bug, fixed:
+IDLE used to be ended by a socket read timing out, which poisons an SSL
+connection, so every mailbox rebuilt itself every 14 minutes and any code
+arriving during a rebuild was missed. If you see it again on a newer Python,
+the culprit is `idle_wait()` in `library/sensors/otp_sources.py` - it must end
+IDLE by sending `DONE`, never by letting the read expire.
 
 **Panel unplugged?** Nothing to do. The child fails to open COM3, and the
 watchdog retries with backoff up to 60s, so reconnecting the panel brings the

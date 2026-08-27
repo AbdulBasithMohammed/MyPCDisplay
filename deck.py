@@ -267,8 +267,26 @@ class Supervisor:
             finally:
                 self.switching = False
 
+    def visible_indices(self):
+        """Screens the user can reach by cycling.
+
+        The OTP screen is marked hidden in deck.yaml: it is pushed onto the
+        panel when a code arrives and taken away again, so having it in the
+        rotation would mean cycling onto a stale code.
+        """
+        return [i for i, s in enumerate(self.screens) if not s.get("hidden")]
+
     def cycle(self, delta):
-        self.switch_to(self.index + delta)
+        visible = self.visible_indices()
+        if not visible:
+            return
+        if self.index in visible:
+            target = visible[(visible.index(self.index) + delta) % len(visible)]
+        else:
+            # Cycling off a hidden screen: enter the rotation from whichever
+            # end the direction implies.
+            target = visible[0] if delta > 0 else visible[-1]
+        self.switch_to(target)
 
     def shutdown(self):
         self._stop = True
@@ -295,6 +313,118 @@ class Supervisor:
                 if not self._stop and not self.switching and self.proc is None:
                     self._spawn()
             backoff = min(backoff * 2, 60)
+
+
+class Notifier:
+    """Pushes the OTP screen onto the panel, then puts back what was there.
+
+    Deliberately not modelled on league_watch: that polls a state that lasts
+    for minutes, while this reacts to an instant and has to time out on its
+    own. What it does borrow is the rule that the panel is yours - if you
+    changed screens by hand while a code was up, the timer expires quietly
+    instead of yanking you somewhere.
+    """
+
+    def __init__(self, sup, screen_index, hold_seconds, icon=None):
+        self.sup = sup
+        self.screen_index = screen_index
+        self.hold = hold_seconds
+        self.icon = icon
+        self._lock = threading.Lock()
+        self._return_to = None
+        self._deadline = 0.0
+
+    def show(self, code, sender, source, label=""):
+        from library.sensors import otp
+
+        otp.publish(code, sender, source, self.hold, label)
+        with self._lock:
+            already_up = self.sup.index == self.screen_index
+            if not already_up:
+                self._return_to = self.sup.index
+            # A second code arriving while the first is up restarts the clock
+            # rather than stacking, so the newer code gets its full 30s.
+            self._deadline = time.time() + self.hold
+        if not already_up:
+            log.info("OTP from %s; showing notification screen", sender)
+            self.sup.switch_to(self.screen_index)
+            if self.icon:
+                self.icon.update_menu()
+
+    def dismiss(self):
+        """Early dismissal.
+
+        Returns True only when the panel was actually showing the code, since
+        the hotkey uses that to decide whether it has handled the keypress. If
+        you had already moved to another screen, the pending timer is cancelled
+        but False comes back so PgUp/PgDn still cycles as normal - swallowing
+        the key there would look like a dead hotkey.
+        """
+        from library.sensors import otp
+
+        with self._lock:
+            if self._deadline <= 0:
+                return False
+            on_panel = self.sup.index == self.screen_index
+            target, self._return_to, self._deadline = self._return_to, None, 0.0
+        otp.clear()
+        if not on_panel:
+            return False
+        if target is not None:
+            log.info("OTP dismissed; returning to %s", self.sup.screens[target]["name"])
+            self.sup.switch_to(target)
+            if self.icon:
+                self.icon.update_menu()
+        return True
+
+    def run(self):
+        from library.sensors import otp
+
+        while not self.sup._stop:
+            time.sleep(0.5)
+            with self._lock:
+                if self._deadline <= 0 or time.time() < self._deadline:
+                    continue
+                target, self._return_to, self._deadline = self._return_to, None, 0.0
+            otp.clear()
+            if self.sup.index != self.screen_index:
+                continue          # you moved on already; leave you where you are
+            if target is not None:
+                log.info("OTP expired; returning to %s",
+                         self.sup.screens[target]["name"])
+                self.sup.switch_to(target)
+                if self.icon:
+                    self.icon.update_menu()
+
+
+def otp_watch(sup, screen_name, icon=None):
+    """Start the OTP sources and wire them to the notification screen."""
+    target = next((i for i, s in enumerate(sup.screens)
+                   if s["name"].lower() == str(screen_name).lower()), None)
+    if target is None:
+        log.warning("OTP: no screen named %r in deck.yaml; disabled", screen_name)
+        return None
+
+    try:
+        from library.sensors import otp, otp_sources
+    except Exception:
+        log.exception("OTP sensors unavailable; disabled")
+        return None
+
+    services = otp.load_services().get("otp") or {}
+    if not services.get("enabled", True):
+        log.info("OTP screen disabled in services.yaml")
+        return None
+
+    hold = float(services.get("hold_seconds") or 30)
+    notifier = Notifier(sup, target, hold, icon)
+    otp.clear()               # a code left over from a previous run is stale
+
+    if not otp_sources.start(services, notifier.show):
+        return None
+
+    threading.Thread(target=notifier.run, name="otp-timer", daemon=True).start()
+    return notifier
 
 
 def league_watch(sup, screen_name, return_after, icon=None):
@@ -382,6 +512,13 @@ def main():
         log.warning("com_settle_seconds is not a number; keeping %.3fs", COM_SETTLE)
     sup = Supervisor(screens)
     sup.index = max(0, min(int(cfg.get("start_screen", 0) or 0), len(screens) - 1))
+    if screens[sup.index].get("hidden"):
+        # start_screen pointing at the OTP screen would leave the panel
+        # showing an empty notification until something arrived.
+        visible = sup.visible_indices()
+        log.warning("start_screen %d is a hidden screen; starting on %r",
+                    sup.index, screens[visible[0]]["name"])
+        sup.index = visible[0]
 
     def make_select(i):
         def handler(icon_, item_):
@@ -408,7 +545,7 @@ def main():
         icon_.stop()
 
     items = [pystray.MenuItem(s["name"], make_select(i), checked=is_current(i), radio=True)
-             for i, s in enumerate(screens)]
+             for i, s in enumerate(screens) if not s.get("hidden")]
     items += [
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Next screen", on_next),
@@ -422,19 +559,28 @@ def main():
     icon = pystray.Icon(name="Turing Deck", title="Turing Deck",
                         icon=Image.open(ICON), menu=pystray.Menu(*items))
 
+    # Assigned once otp_watch has run; None when OTP is off.
+    notifier = [None]
+
     def on_hotkey(action):
-        if action == "next_screen":
-            sup.cycle(+1)
-        elif action == "prev_screen":
-            sup.cycle(-1)
-        else:
+        if action not in ("next_screen", "prev_screen"):
             return
+        # While a code is on the panel, either key means "I have read it" -
+        # dismissing back to where you were beats cycling onward, which would
+        # leave you on a screen you did not ask for.
+        if notifier[0] is not None and notifier[0].dismiss():
+            return
+        sup.cycle(+1 if action == "next_screen" else -1)
         icon.update_menu()
 
     sup.start()
     threading.Thread(target=sup.watch, name="watchdog", daemon=True).start()
     threading.Thread(target=hotkey_pump, args=(cfg.get("hotkeys") or {}, on_hotkey),
                      name="hotkeys", daemon=True).start()
+
+    otp_cfg = cfg.get("otp") or {}
+    if otp_cfg.get("enabled", True):
+        notifier[0] = otp_watch(sup, otp_cfg.get("screen", "OTP"), icon)
 
     auto = cfg.get("auto_switch") or {}
     if auto.get("enabled", True) and auto.get("on_league_match", True):

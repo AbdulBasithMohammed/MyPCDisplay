@@ -542,3 +542,6 @@ from library.sensors.agenda_sensors import *  # noqa: E402,F401
 # Discord voice sensors, same pattern as the agenda ones.
 from library.sensors.discord_sensors import *  # noqa: E402,F401
 from library.sensors.league_sensors import *  # noqa: E402,F401
+
+# OTP notification screen sensors, same pattern.
+from library.sensors.otp_sensors import *  # noqa: E402,F401

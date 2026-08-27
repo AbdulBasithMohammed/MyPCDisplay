@@ -1,0 +1,100 @@
+---
+author: "built for @abdulbasith - white & light blue deck (OTP notification)"
+
+# Shown automatically when an OTP arrives, then replaced by whatever was on the
+# panel before. deck.py owns that timer; this theme only draws what the
+# supervisor already wrote to tmp/otp_state.json.
+#
+# Card geometry must match tools/make_deck_backgrounds.py:build_otp().
+
+display:
+  DISPLAY_SIZE: 3.5"
+  DISPLAY_ORIENTATION: landscape
+  DISPLAY_RGB_LED: 255, 255, 255
+
+static_images:
+  BACKGROUND:
+    PATH: background.png
+    X: 0
+    Y: 0
+    WIDTH: 480
+    HEIGHT: 320
+
+static_text:
+  DISMISS_HINT:
+    TEXT: "PgUp / PgDn to dismiss"
+    X: 48
+    Y: 262
+    FONT: roboto/Roboto-Regular.ttf
+    FONT_SIZE: 12
+    FONT_COLOR: 140, 168, 190
+    BACKGROUND_IMAGE: background.png
+
+STATS:
+  CUSTOM:
+    # 1s is enough for a countdown that only ever shows whole seconds, and
+    # keeps the cost of this screen to roughly one text redraw per tick.
+    INTERVAL: 1
+
+    # ---------- source chip ----------
+    OtpSource:
+      TEXT:
+        SHOW: True
+        X: 48
+        Y: 62
+        WIDTH: 200
+        HEIGHT: 18
+        FONT: roboto/Roboto-Bold.ttf
+        FONT_SIZE: 13
+        FONT_COLOR: 45, 164, 232
+        BACKGROUND_IMAGE: background.png
+
+    # ---------- who sent it ----------
+    OtpSender:
+      TEXT:
+        SHOW: True
+        X: 48
+        Y: 84
+        WIDTH: 384
+        HEIGHT: 34
+        FONT: malgun/malgunbd.ttf
+        FONT_SIZE: 26
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+    # ---------- the code ----------
+    # The one thing this screen exists for, so it gets the whole middle band.
+    OtpCode:
+      TEXT:
+        SHOW: True
+        X: 48
+        Y: 132
+        WIDTH: 384
+        HEIGHT: 80
+        FONT: malgun/malgunbd.ttf
+        FONT_SIZE: 62
+        FONT_COLOR: 18, 52, 80
+        BACKGROUND_IMAGE: background.png
+
+    # ---------- countdown ----------
+    OtpCountdown:
+      TEXT:
+        SHOW: True
+        X: 396
+        Y: 208
+        WIDTH: 40
+        HEIGHT: 18
+        FONT: roboto/Roboto-Bold.ttf
+        FONT_SIZE: 13
+        FONT_COLOR: 140, 168, 190
+        BACKGROUND_IMAGE: background.png
+      GRAPH:
+        SHOW: True
+        X: 48
+        Y: 244
+        WIDTH: 384
+        HEIGHT: 6
+        MIN_VALUE: 0
+        MAX_VALUE: 100
+        BAR_COLOR: 45, 164, 232
+        BACKGROUND_IMAGE: background.png

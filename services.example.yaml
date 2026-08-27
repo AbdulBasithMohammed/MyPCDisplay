@@ -40,3 +40,50 @@ league:
     #   - Doran's Bow
     #   - Berserker's Greaves
     #   - Infinity Edge
+
+otp:
+  # Show a one-time passcode on the panel the moment it arrives, for
+  # hold_seconds, then put the previous screen back. PgUp/PgDn dismiss early.
+  enabled: true
+  hold_seconds: 30
+
+  email:
+    # Each entry under `accounts:` is one mailbox, watched on its own thread
+    # and its own IMAP connection. Keys set directly under `email:` are shared
+    # defaults that every account inherits and may override.
+    #
+    # Gmail needs an App Password, not your account password:
+    #   1. Turn on 2-Step Verification
+    #   2. Create one at https://myaccount.google.com/apppasswords
+    # Treat each one like a password. They are only ever sent to that account's
+    # `host`, and nothing here sends mail.
+    #
+    # `label` is optional and shown on the panel next to EMAIL, so you can tell
+    # which inbox a code landed in. Leave it out if you only watch one.
+    enabled: false
+    host: imap.gmail.com
+    port: 993
+    folder: INBOX
+    # Ignore anything older than this on arrival, so a reconnect that hands us
+    # a backlog cannot replay yesterday's codes onto the panel.
+    max_age_seconds: 180
+    # Only used if the server refuses IDLE; with IDLE a code appears in ~1s.
+    poll_seconds: 15
+    accounts:
+      - label: personal
+        user: ""
+        app_password: ""
+      # - label: work
+      #   user: "you@company.com"
+      #   host: outlook.office365.com
+      #   app_password: ""
+
+  notifications:
+    # Read Windows toast notifications and score those for codes too. This is
+    # how a phone OTP arrives, via Phone Link mirroring the message.
+    # Verified working from an unpackaged process; Windows will ask once for
+    # notification access.
+    enabled: true
+    # Apps whose toasts should never be scored, matched against the app name
+    # or package family name, case-insensitive.
+    ignore_apps: []

@@ -80,9 +80,16 @@ goes blank or a value reads wrong after syncing upstream, check here first.
 
 ```
 deck.py            tray icon, global hotkeys, supervises main.py as a child
-  └── main.py      upstream render loop; reads THEME from config.yaml
-        └── library/sensors/sensors_custom.py   custom sensors (see its CLAUDE.md)
+  ├── main.py      upstream render loop; reads THEME from config.yaml
+  │     └── library/sensors/sensors_custom.py   custom sensors (see its CLAUDE.md)
+  └── library/sensors/otp_sources.py            IMAP IDLE + toast watchers
 ```
+
+**The OTP watchers live in the supervisor on purpose.** The child dies on every
+screen switch, so an IMAP connection held there would reconnect to Gmail each
+time you pressed PgDn. The supervisor writes `cache/otp_state.json`; the child
+reads it. That handoff is also what lets the code survive the switch that
+displays it.
 
 Switching screens **rewrites `THEME` in config.yaml and restarts the child**. It
 looks heavy-handed, and it is deliberate: `scheduler.py` reads refresh intervals
@@ -118,7 +125,16 @@ Nothing here needs the panel plugged in.
 venv/Scripts/python.exe preview-theme.py DeckLeague 15   # renders screencap.png
 venv/Scripts/python.exe tools/league_selftest.py         # every League phase
 venv/Scripts/python.exe tools/check_league_builds.py     # item names vs live patch
+venv/Scripts/python.exe tools/otp_selftest.py            # OTP scoring, with reasons
+venv/Scripts/python.exe -m pytest tests/library/sensors/ -q
 ```
+
+`TURING_OTP_DEMO=1` fills the OTP screen with a fabricated code, the same way
+`TURING_LEAGUE_DEMO=1` works for League.
+
+**Give `preview-theme.py` at least ~5 seconds.** A shorter run can exit before
+the first custom-stat pass completes and renders a background with every sensor
+element blank - which looks exactly like a sensor crash and is not one.
 
 `TURING_LEAGUE_DEMO=1` fills the League screen with a fabricated match, so the
 preview shows real content instead of "No match".
@@ -148,6 +164,34 @@ Each of these cost real time. They are conclusions, not guesses.
 - **`stats2.u.gg` answers 403 behind a Cloudflare challenge.** Do not attempt to
   work around bot protection. op.gg serves the same data in server-rendered HTML
   with no challenge, so that is what is parsed.
+- **`tmp` in the repo root is a FILE, not a directory.**
+  `library/lcd/lcd_simulated.py` saves the simulated panel to a file with that
+  exact name on every render, and `.gitignore` lists it as such. `os.makedirs`
+  on `tmp/` therefore fails with `FileExistsError` the moment anyone has run
+  `preview-theme.py`. Per-machine runtime state goes in `cache/`.
+- **Reading Windows toasts from unpackaged Python works.** `UserNotificationListener`
+  returns `Allowed`, not `Denied`, and exposes `package_family_name` for exact
+  source filtering (Phone Link is `Microsoft.YourPhone_8wekyb3d8bbwe`). The
+  namespaces are separate pip packages - `winrt-Windows.UI.Notifications` does
+  **not** pull in `.Management`, and `AppInfo` needs `winrt-Windows.ApplicationModel`.
+  All four are pinned in `requirements.txt`.
+- **Never end an IMAP IDLE by letting the socket read time out.** A timed-out
+  read on an `SSLSocket` poisons the connection: every subsequent read raises
+  `cannot read from timed out object`. The first version used
+  `sock.settimeout(refresh)` as its refresh mechanism, so all three mail
+  watchers tore down and rebuilt every 840s, and any code arriving during a
+  rebuild was silently missed — the panel looked like it had simply stopped
+  working. `idle_wait()` now ends IDLE by sending `DONE` from a timer thread
+  and reads on until the tagged completion line; the socket timeout is only a
+  dead-link net at `refresh + 60`. Soak-tested at a 5s refresh: 39 cycles
+  across three live connections, zero reconnects.
+- **A reconnecting mail watcher must resume from the last processed UID**, not
+  re-read the mailbox tip. Re-reading the tip discards anything that arrived
+  while the connection was down. `max_age_seconds` is what stops a resumed
+  watcher acting on stale mail.
+- **`imaplib` has no `IDLE` support on Python 3.13.** `IMAP4.idle()` landed
+  later, so `otp_sources.py` drives the protocol directly and degrades to
+  polling on any failure rather than reconnect-looping.
 - **op.gg has no JSON API.** It is Next.js server components; the ids are in the
   page HTML. A plain `requests` call is enough — no browser at runtime.
 
