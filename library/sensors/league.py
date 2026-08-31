@@ -423,6 +423,33 @@ def champ_select():
     return None
 
 
+def assigned_position():
+    """Your lane in champ select, before any pick is locked in.
+
+    Separate from champ_select(), which deliberately returns nothing until the
+    pick is *completed*. The role is known much earlier than the champion, and
+    it is all the meta list needs.
+    """
+    lock = _lockfile()
+    if not lock:
+        return ""
+    try:
+        s = _session()
+        r = s.get("%s://127.0.0.1:%s/lol-champ-select/v1/session"
+                  % (lock["proto"], lock["port"]),
+                  auth=("riot", lock["password"]), timeout=3)
+        if r.status_code != 200:
+            return ""
+        data = r.json()
+        me = data.get("localPlayerCellId")
+        for p in (data.get("myTeam") or []):
+            if p.get("cellId") == me:
+                return (p.get("assignedPosition") or "").upper()
+    except Exception:
+        pass
+    return ""
+
+
 # ----------------------------------------------------------------------- live
 class League:
     """Cached match state, refreshed by a background poller."""
@@ -454,7 +481,8 @@ class League:
     phase = "idle"              # idle | champselect | early | build
     _build_memo = {}            # (champion, role) -> payload dict
 
-    EARLY_SECONDS = 3 * 60      # starting items matter for the first three minutes
+    EARLY_SECONDS = 90          # show starting items only this long; by 1:30 the
+                                # opening is bought and the core build is the question
     CORE_DONE = 3               # completed items that count as "core finished"
     LEGENDARY_COST = 2200       # at or above this, and not boots, it is a real item
 
@@ -606,6 +634,14 @@ class League:
         cls.champion = ""
         cls.role = ""
         cls.build = {}
+        if flow == "ChampSelect":
+            # In champ select but nothing locked in yet. There is no champion
+            # to build for, so show what is strong in the assigned role
+            # instead of an empty screen.
+            cls.role = assigned_position() or ""
+            cls.phase = "meta"
+            cls.status = "champ select"
+            return
         cls.phase = "idle"
         cls.status = status
 

@@ -70,7 +70,8 @@ full-screen blit costs ~1.3 s on this panel.
 | `agenda.py` / `agenda_sensors.py` | Weather (Open-Meteo) and calendar (iCal) |
 | `discord_rpc.py` / `discord_sensors.py` | Discord voice state over the local IPC pipe |
 | `league.py` | Match state, phases, Data Dragon, champ select |
-| `opgg.py` | Scrapes and parses op.gg build pages |
+| `opgg.py` | Scrapes op.gg build pages **and the tier list** (`tierlist()`) |
+| `dpm.py` | Ranked profile from dpm.lol's JSON API, for the idle screen |
 | `league_render.py` | Composites the whole League frame with PIL |
 | `league_sensors.py` | Exposes that frame as one `BITMAP` sensor |
 
@@ -90,10 +91,29 @@ full-screen blit costs ~1.3 s on this panel.
 - **Champion names need two keys.** The live game says `Kai'Sa` and `Wukong`;
   Data Dragon keys them `Kaisa` and `MonkeyKing`; op.gg wants `monkeyking`.
   `Static.champs` is indexed under both, and `SLUG_ALIASES` handles op.gg.
-- **op.gg uses three different stat layouts** and assuming one silently drops
+- **op.gg uses four different stat layouts** and assuming one silently drops
   whole sections rather than erroring:
   `pick% / games / win%` (core, starters, boots), `pick / games / win%`
-  (summoner spells, no `%` on pick), `win% / games` (4th/5th/6th, no pick).
+  (summoner spells, no `%` on pick), `win% / games` (4th/5th/6th, no pick),
+  and runes label AFTER the numbers: `pick% games Games Pick rate win% Win rate`
+  - the generic parser read that as "no trailing win" and showed the pick rate
+  as the win rate until someone noticed on the panel.
+
+## League screen phases
+
+`League.phase` drives which renderer runs. Two of them show no build at all:
+
+| Phase | When | Shows |
+|---|---|---|
+| `idle` | no game, not in champ select | rank, LP, W/L, ladder, most-played (`dpm.py`) |
+| `meta` | in champ select, **nothing locked in yet** | op.gg tier list for your assigned role |
+| `champselect` | pick completed | summoner spells and runes |
+| `early` | first `EARLY_SECONDS` (90s) | starting items, boots, skill order |
+| `build` / `late` | after that | core build / 4th-6th items |
+
+`meta` exists because `champ_select()` deliberately returns nothing until the
+pick is *completed* - the role is known long before the champion, and
+`assigned_position()` reads just that.
 
 ## Adding a sensor
 

@@ -28,6 +28,15 @@ discord:
   client_secret: ""
 
 league:
+  # Your Riot ID, "Name#TAG". Used for the ranked profile shown on the League
+  # screen between games (rank, LP, W/L, most-played champions). Leave empty to
+  # show nothing there. Read-only and public - this is not a credential.
+  riot_id: ""
+
+  # Rank bracket the champ-select meta list is drawn from (op.gg tier list):
+  # gold_plus, platinum_plus, emerald_plus, diamond_plus, master_plus.
+  meta_tier: emerald_plus
+
   # Build orders are scraped from op.gg (one request per champion+role per day,
   # cached on disk). Set false to use league_builds.yaml only - no network.
   use_opgg: true

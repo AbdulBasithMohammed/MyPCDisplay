@@ -24,7 +24,7 @@ Screens:
 - **Voice** - Discord voice channel: who is in it, who is talking right now,
   who just joined, and your own mute state.
 - **League** - phase-driven: summoner spells and skill order once you lock in,
-  starting items for the first three minutes, core build after that. Appears on
+  starting items for the first 90 seconds, core build after that. Appears on
   its own at champion lock-in.
 - **OTP** - a verification code that just arrived. Not in the cycle: it appears
   on its own and leaves on its own. See below.
@@ -167,6 +167,25 @@ Note `GET_CHANNEL` does not report speaking state, so the roster refresh carries
 it across - otherwise every refresh blanked whoever was mid-sentence.
 
 ## League screen
+
+Between games the screen shows your **ranked profile** - tier, LP, W/L, ladder
+position and your three most-played champions - instead of an empty "No match"
+card. That needs your Riot ID in `services.yaml`:
+
+```yaml
+league:
+  riot_id: "Name#TAG"
+  meta_tier: emerald_plus     # bracket the champ-select meta list uses
+```
+
+It comes from dpm.lol's public JSON API - no key, no login, and the ID is
+public information rather than a credential. Refreshed every 15 minutes and
+cached on disk, so a failure keeps showing the last good profile.
+
+In **champ select before you lock in** the screen shows the strongest
+champions in your assigned role, from op.gg's tier list for `meta_tier`. Once
+you lock in it switches to that champion's spells and runes as before.
+
 
 Shows what is useful *right now*, changing with the phase of the game:
 

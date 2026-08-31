@@ -34,7 +34,7 @@ Cycle with **Page Down** / **Page Up**, or pick one from the tray icon.
 | **Detail** | Memory, disk, network up/down, GPU VRAM, ping |
 | **Agenda** | Weather now/today, next calendar event with a live countdown, two after it |
 | **Voice** | Discord voice channel: who is in it, who is talking, who just joined |
-| **League** | Phase-driven build guide — see below |
+| **League** | Rank profile between games, then a phase-driven build guide — see below |
 | **OTP** | A one-time passcode that just arrived — appears on its own, then leaves |
 
 The **League** screen changes with the state of the match, and switches itself on
@@ -42,8 +42,10 @@ at champion lock-in:
 
 | Phase | Shows |
 |---|---|
+| **Between games** | Rank, LP, W/L, ladder position and your most-played champions |
+| **Champ select** — before lock-in | The strongest champions in your assigned role right now |
 | **PICK** — locked in | Summoner spell pairs and rune pages |
-| **START** — 0:00 to 3:00 | Starting items, boots, skill order |
+| **START** — 0:00 to 1:30 | Starting items, boots, skill order |
 | **CORE** — after 3:00 | The five most-played core builds, ranked |
 | **FINISH** — 3 items done | Fourth / fifth / sixth item options |
 

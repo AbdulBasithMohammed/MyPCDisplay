@@ -11,10 +11,14 @@ the content only changes when the *phase* changes, and the output filename
 carries a hash of the state, so an unchanged screen is never redrawn.
 
 Phases, and what each one answers:
+    idle         how am I doing?          rank, LP, W/L, most-played champions
+    meta         what should I pick?      op.gg tier list for my role
     champselect  what do I take?          summoner spells + runes
     early        what do I buy first?     starting items + boots + skill order
     build        what do I build?         the core builds, ranked
     late         what do I finish with?   4th / 5th / 6th items
+
+idle and meta draw without the left rail: neither has a champion to put in it.
 
 Every option carries its win rate and sample size, because "56% over 8,605
 games" and "60% over 290 games" are not the same recommendation.
@@ -24,6 +28,7 @@ not the three stacked cards the other screens use.
 """
 import hashlib
 import os
+import threading
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -342,15 +347,214 @@ def _late(img, d, b):
         y += 42
 
 
-def _idle(img, d, ready=True):
+TIER_COLOR = {
+    "Iron": (110, 110, 110), "Bronze": (156, 106, 70), "Silver": (140, 158, 170),
+    "Gold": (206, 160, 60), "Platinum": (60, 170, 168), "Emerald": (48, 158, 108),
+    "Diamond": (86, 128, 220), "Master": (150, 90, 200),
+    "Grandmaster": (198, 78, 78), "Challenger": (72, 156, 214),
+}
+
+
+def _display_name(champ):
+    """'XinZhao' -> 'Xin Zhao'. dpm.lol reports Riot's internal names.
+
+    Data Dragon keys champions by that internal name and carries the pretty
+    one, so the id lookup is only a fallback for anything it does not know.
+    """
+    internal = champ.get("champion") or "?"
+    try:
+        # champ_by_id carries the display name; Static.champs is keyed by the
+        # internal name but holds only the stat block, so it is no use here.
+        return Static.champ_by_id.get(str(champ.get("champion_id") or "")) or internal
+    except Exception:
+        return internal
+
+
+def _pips(d, results, x, y, size=11, gap=4):
+    """Recent results as W/L squares, newest first."""
+    for won in results[:5]:
+        d.rounded_rectangle((x, y, x + size, y + size), 3,
+                            fill=GOOD if won else (208, 92, 92))
+        _center(d, "W" if won else "L", x + size / 2 + 0.5, y - 1,
+                font(F_BOLD, 8), (255, 255, 255))
+        x += size + gap
+    return x
+
+
+def _idle(img, d, ready=True, profile=None):
+    """Between games: the ranked profile, or a plain waiting card without one.
+
+    Showing rank, LP and what you actually play is more use here than "No
+    match" - this is the state the screen sits in most of the time.
+    """
+    profile = profile or {}
+    if not profile.get("tier"):
+        d.rounded_rectangle((8, 8, W - 8, H - 8), 14, fill=CARD, outline=CARD_EDGE)
+        _center(d, "No match" if ready else "Starting up", W / 2, 128,
+                font(F_BOLD, 30), NAVY)
+        _center(d, "waiting for champ select" if ready else "loading item data",
+                W / 2, 172, font(F_REG, 15), MUTED)
+        d.rounded_rectangle((W / 2 - 40, 210, W / 2 + 40, 214), 2, fill=TRACK)
+        return
+
+    # ---- rank card -------------------------------------------------------
+    d.rounded_rectangle((8, 8, W - 8, 116), 14, fill=CARD, outline=CARD_EDGE)
+    tier = profile.get("tier") or ""
+    colour = TIER_COLOR.get(tier, ACCENT)
+
+    d.rounded_rectangle((20, 22, 26, 102), 3, fill=colour)
+    rank_text = "%s %s" % (tier, profile.get("division") or "")
+    d.text((38, 24), rank_text.strip(), font=font(F_BOLD, 26), fill=colour)
+    lp = profile.get("lp")
+    if lp is not None:
+        d.text((38, 58), "%d LP" % lp, font=font(F_BOLD, 15), fill=NAVY)
+
+    wins, losses = profile.get("wins") or 0, profile.get("losses") or 0
+    wr = profile.get("winrate")
+    if wins or losses:
+        d.text((38, 80), "%dW %dL" % (wins, losses), font=font(F_REG, 12), fill=MUTED)
+        if wr is not None:
+            x = 38 + d.textlength("%dW %dL  " % (wins, losses), font=font(F_REG, 12))
+            d.text((x, 80), "%d%%" % wr, font=font(F_BOLD, 12),
+                   fill=GOOD if wr >= 52 else MUTED)
+
+    # Ladder position, right-aligned so it never collides with the rank text.
+    ladder, top = profile.get("ladder"), profile.get("ladder_top")
+    if ladder:
+        _right(d, "{:,}".format(int(ladder)), XR, 26, font(F_BOLD, 17), NAVY)
+        _right(d, "LADDER RANK", XR, 47, font(F_REG, 9), MUTED)
+    if top:
+        _right(d, "top %.1f%%" % float(top), XR, 64, font(F_BOLD, 12), ACCENT)
+    if profile.get("recent"):
+        _right(d, "RECENT", XR, 84, font(F_REG, 9), MUTED)
+        _pips(d, profile["recent"], XR - 79, 96)
+
+    # ---- most played -----------------------------------------------------
+    d.rounded_rectangle((8, 124, W - 8, H - 8), 14, fill=CARD, outline=CARD_EDGE)
+    d.text((20, 136), "MOST PLAYED", font=font(F_BOLD, 12), fill=MUTED)
+    name = profile.get("name") or ""
+    if name:
+        _right(d, "%s#%s" % (name, profile.get("tag") or ""), W - 20, 136,
+               font(F_REG, 10), MUTED)
+    d.line((20, 154, W - 20, 154), fill=CARD_EDGE, width=1)
+
+    y = 164
+    for c in (profile.get("champions") or [])[:3]:
+        paste(img, champ_icon(c.get("champion"), 34), (20, y), 34, radius=8)
+        d.text((62, y + 1), _ellipsize(d, _display_name(c), font(F_BOLD, 14), 96),
+               font=font(F_BOLD, 14), fill=NAVY)
+        d.text((62, y + 19), "%d games" % (c.get("games") or 0),
+               font=font(F_REG, 10), fill=MUTED)
+
+        wr_c = c.get("winrate") or 0
+        d.text((186, y + 1), "%d%%" % wr_c, font=font(F_BOLD, 14),
+               fill=GOOD if wr_c >= 52 else NAVY)
+        d.text((186, y + 19), "win rate", font=font(F_REG, 9), fill=MUTED)
+
+        d.text((260, y + 1), "%.1f" % (c.get("kda") or 0),
+               font=font(F_BOLD, 14), fill=NAVY)
+        d.text((260, y + 19), "KDA", font=font(F_REG, 9), fill=MUTED)
+
+        _right(d, "%.1f / %.1f / %.1f" % (c.get("kills") or 0, c.get("deaths") or 0,
+                                          c.get("assists") or 0),
+               XR, y + 1, font(F_REG, 12), NAVY)
+        _right(d, "%.1f cs/m" % (c.get("csm") or 0), XR, y + 19,
+               font(F_REG, 9), MUTED)
+        y += 44
+
+
+def _meta(img, d, rows, role):
+    """Champ select before you lock in: what is strong in your role.
+
+    Until the pick is completed there is no champion to build for, so the old
+    screen showed nothing at all. A tier list is the one thing that is useful
+    at exactly that moment.
+    """
     d.rounded_rectangle((8, 8, W - 8, H - 8), 14, fill=CARD, outline=CARD_EDGE)
-    _center(d, "No match" if ready else "Starting up", W / 2, 128, font(F_BOLD, 30), NAVY)
-    _center(d, "waiting for champ select" if ready else "loading item data",
-            W / 2, 172, font(F_REG, 15), MUTED)
-    d.rounded_rectangle((W / 2 - 40, 210, W / 2 + 40, 214), 2, fill=TRACK)
+    d.text((20, 20), "CHAMP SELECT", font=font(F_BOLD, 12), fill=ACCENT)
+    _right(d, (role or "ALL").upper(), W - 20, 20, font(F_BOLD, 12), MUTED)
+    d.text((20, 40), "Strongest picks right now", font=font(F_BOLD, 17), fill=NAVY)
+    d.line((20, 68, W - 20, 68), fill=CARD_EDGE, width=1)
+
+    if not rows:
+        _center(d, "no meta data", W / 2, 150, font(F_REG, 15), MUTED)
+        return
+
+    _right(d, "WIN", W - 96, 76, font(F_REG, 9), MUTED)
+    _right(d, "PICK", W - 20, 76, font(F_REG, 9), MUTED)
+
+    y = 92
+    for i, r in enumerate(rows[:5], start=1):
+        paste(img, champ_icon(r.get("champion"), 30), (44, y), 30, radius=7)
+        _center(d, str(i), 28, y + 7, font(F_BOLD, 13), MUTED)
+        d.text((84, y + 6), _ellipsize(d, r.get("champion") or "?",
+                                       font(F_BOLD, 15), 160),
+               font=font(F_BOLD, 15), fill=NAVY)
+        win = r.get("win") or ""
+        try:
+            good = float(win.rstrip("%")) >= 51.0
+        except ValueError:
+            good = False
+        _right(d, win, W - 96, y + 6, font(F_BOLD, 14), GOOD if good else NAVY)
+        _right(d, r.get("pick") or "", W - 20, y + 6, font(F_REG, 12), MUTED)
+        y += 40
 
 
 # ------------------------------------------------------------------ render
+def _profile():
+    """Ranked profile for the idle card, or {} if it is not available yet.
+
+    Never raises and never blocks: the poller owns the network, this only
+    reads what it has already published.
+    """
+    try:
+        from library.sensors.dpm import Profile
+        Profile.ensure_started()
+        return Profile.data or {}
+    except Exception:
+        return {}
+
+
+_meta_memo = {}
+_meta_fetching = set()
+_meta_lock = threading.Lock()
+
+
+def _meta_rows(role):
+    """Tier-list rows for a role. Never blocks; may return [] the first time.
+
+    opgg.tierlist can spend 25s on a cold cache, and this is called from the
+    render path, which is the single-threaded loop shared with drawing. So the
+    fetch is pushed onto a daemon thread and the frame is drawn with whatever
+    is already known - the next tick picks up the result. Same rule the
+    pollers follow: sensors read state, threads fill it.
+    """
+    key = str(role or "")
+    with _meta_lock:
+        if key in _meta_memo:
+            return _meta_memo[key]
+        if key in _meta_fetching:
+            return []
+        _meta_fetching.add(key)
+
+    def worker():
+        rows = []
+        try:
+            from library.sensors import league, opgg
+            cfg = league._cfg()
+            rows = opgg.tierlist(role, CACHE_DIR,
+                                 tier=str(cfg.get("meta_tier") or "emerald_plus"))
+        except Exception:
+            rows = []
+        with _meta_lock:
+            if rows:
+                _meta_memo[key] = rows
+            _meta_fetching.discard(key)
+
+    threading.Thread(target=worker, name="league-meta", daemon=True).start()
+    return []
+
+
 def _sig(rows, *fields):
     return ";".join("|".join(str(r.get(f, "")) for f in fields) +
                     "," + ",".join(str(i) for i in (r.get("icons") or []))
@@ -366,7 +570,22 @@ def state_key(champion, role, phase, build):
     pointless ~1.3s full-screen blit on every cold start.
     """
     if phase == "idle":
-        return "idle|" + str(Static.ready)
+        # The profile is part of the key so a new rank or a finished game
+        # redraws, but nothing else about it does - an unchanged profile keeps
+        # serving the cached frame instead of re-blitting every poll.
+        p = _profile()
+        return "|".join(["idle", str(Static.ready), str(p.get("tier")),
+                         str(p.get("division")), str(p.get("lp")),
+                         str(p.get("wins")), str(p.get("losses")),
+                         str(p.get("ladder")),
+                         ",".join("%s%s%s" % (c.get("champion"), c.get("games"),
+                                              c.get("winrate"))
+                                  for c in (p.get("champions") or [])),
+                         ",".join("1" if r else "0" for r in (p.get("recent") or []))])
+    if phase == "meta":
+        rows = _meta_rows(role)
+        return "meta|" + str(role) + "|" + ",".join(
+            "%s%s%s" % (r.get("champion"), r.get("win"), r.get("pick")) for r in rows)
     return "|".join([
         str(champion), str(role), str(phase), str(Static.patch),
         _sig(build.get("spells"), "win", "games"),
@@ -392,7 +611,10 @@ def render(champion, role, phase, build):
 
     if phase == "idle":
         img, d = _canvas(rail=False)
-        _idle(img, d, ready=Static.ready)
+        _idle(img, d, ready=Static.ready, profile=_profile())
+    elif phase == "meta":
+        img, d = _canvas(rail=False)
+        _meta(img, d, _meta_rows(role), role)
     else:
         img, d = _canvas()
         _rail(img, d, champion, role, phase)

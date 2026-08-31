@@ -33,7 +33,7 @@ CACHE_HOURS = 24
 # Bump when the shape of the cached payload changes. Without this, an upgrade
 # keeps serving yesterday's cache in the old format and the screen breaks on a
 # missing key - which is exactly what happened when spells and skills were added.
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 TIMEOUT = 25
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
@@ -43,11 +43,13 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 SECTIONS = ("Summoner spells", "Skill order", "Starter items", "Boots",
             "Core builds", "Fourth Item", "Fifth Item", "Sixth Item")
 
-# The page uses three different stat layouts, and assuming one silently drops
-# whole sections:
+# The page uses four different stat layouts, and assuming one silently drops
+# whole sections (or worse - see _runes, whose labelled layout once got its
+# pick rate displayed as a win rate):
 #     core / starters / boots : "12.34 % 5,678 Games 56.7 %"   pick, games, win
 #     summoner spells         : "95.24 12,267 Games 49.91 %"   pick has no %
 #     fourth / fifth / sixth  : "63.07 % 48,917 Games"          win first, no pick
+#     runes                   : "55.42% 89,832 Games Pick rate 52.30% Win rate"
 # So the trailing win rate is optional, and when it is absent the leading figure
 # is the win rate rather than the pick rate.
 NUM = r"\d{1,3}(?:\.\d{1,2})?"
@@ -170,7 +172,18 @@ def _runes(html, limit=2):
         styles = re.findall(r"perkStyle/(\d+)\.png", seg)
         keys = re.findall(r"/perk/(\d+)\.png", seg)
         names = re.findall(r'alt="([^"]{2,30})"', seg)
-        st = _stats(_plain(seg))
+        # Rune blocks use a fourth stat layout, with the labels AFTER the
+        # numbers: "55.42% 89,832 Games Pick rate 52.30% Win rate". Running
+        # the generic _stats over it sees "55.42% 89,832 Games", concludes
+        # the trailing win rate is absent, and promotes the PICK rate to the
+        # win rate - which is exactly the wrong number to put on the panel.
+        plain = _plain(seg)
+        m = re.search(r"(%s) ?%% ([\d,]{2,}) Games Pick rate (%s) ?%% Win rate"
+                      % (NUM, NUM), plain)
+        if m:
+            st = (m.group(1) + "%", m.group(2), m.group(3) + "%")
+        else:
+            st = _stats(plain)
         if len(styles) < 2 or not keys or not st:
             continue
         out.append({"style": styles[0], "keystone": keys[0], "sub": styles[1],
@@ -198,6 +211,87 @@ def _skill_order(seg):
     text = text[:text.find("%")] if "%" in text else text
     letters = re.findall(r"(?<![A-Za-z])([QWER])(?![A-Za-z])", text)
     return seen[:3], "".join(letters[:18])
+
+
+# One row of the ranking table, as plain text:
+#     "1 Jinx 52.25% 16.69% 5.61%"   rank, champion, win, pick, ban
+# The champion name is greedy-free so multi-word names (Miss Fortune, Dr. Mundo)
+# survive, and the three percentages anchor the end of the row.
+TIER_ROW_RE = re.compile(
+    r"(\d{1,2}) ([A-Z][A-Za-z’'.& ]{1,20}?) "
+    r"(\d{1,2}\.\d{1,2})% (\d{1,2}\.\d{1,2})% (\d{1,2}\.\d{1,2})%")
+
+TIERLIST_HOURS = 12          # the meta does not move faster than half a day
+
+
+def _tierlist_cache(cache_dir, role_slug, tier):
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, "opgg_tier_%s_%s.json" % (role_slug, tier))
+
+
+def tierlist(role, cache_dir, tier="emerald_plus", limit=5, force=False):
+    """Best champions for one role right now: [{champion, win, pick, ban}].
+
+    Same server-rendered source as the build pages, so no browser and no API
+    key. Used by the champ-select screen when you have not locked in yet -
+    at that point there is no champion to show a build for, and what actually
+    helps is "what is strong in my role".
+    """
+    role_slug = ROLE_SLUG.get(str(role or "").upper(), "") or "adc"
+    path = _tierlist_cache(cache_dir, role_slug, tier)
+
+    if not force and os.path.exists(path):
+        try:
+            if time.time() - os.path.getmtime(path) < TIERLIST_HOURS * 3600:
+                with open(path, encoding="utf-8") as f:
+                    cached = json.load(f)
+                if cached.get("v") == CACHE_VERSION:
+                    return cached.get("rows") or []
+        except Exception:
+            pass
+
+    try:
+        import requests
+        r = requests.get("https://op.gg/lol/champions",
+                         params={"position": role_slug, "tier": tier},
+                         timeout=TIMEOUT,
+                         headers={"User-Agent": UA,
+                                  "Accept-Language": "en-US,en;q=0.9"})
+        if r.status_code != 200 or len(r.text) < 50000:
+            raise ValueError("unexpected response")
+        plain = _plain(r.text)
+    except Exception:
+        try:
+            with open(path, encoding="utf-8") as f:
+                return (json.load(f).get("rows") or [])
+        except Exception:
+            return []
+
+    rows, seen, last_rank = [], set(), 0
+    for m in TIER_ROW_RE.finditer(plain):
+        rank, name, win, pick, ban = m.groups()
+        name, rank = name.strip(), int(rank)
+        # The table is in rank order, so require the rank to advance - that
+        # skips the "weak against" columns without demanding a perfect
+        # sequence. Insisting on exactly last+1 meant one unmatched name
+        # (Kai'Sa, whose apostrophe is typographic) silently truncated
+        # everything after it.
+        if name in seen or rank <= last_rank:
+            continue
+        seen.add(name)
+        last_rank = rank
+        rows.append({"champion": name, "win": win + "%",
+                     "pick": pick + "%", "ban": ban + "%"})
+        if len(rows) >= limit:
+            break
+
+    if rows:
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"v": CACHE_VERSION, "rows": rows}, f)
+        except Exception:
+            pass
+    return rows
 
 
 def fetch(champion, role, cache_dir, force=False):

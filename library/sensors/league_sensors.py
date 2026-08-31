@@ -7,8 +7,10 @@ sensor. So the whole frame is drawn in league_render.py and handed over as a
 file path, which the BITMAP element blits (see library/stats.py).
 
 What is shown depends on the phase, because what is useful changes:
-    locked in      -> summoner spells and skill order
-    first 3 min    -> starting items
+    between games  -> ranked profile: rank, LP, W/L, most-played champions
+    champ select   -> strongest champions in your role, until you lock in
+    locked in      -> summoner spells and runes
+    first 90s      -> starting items
     after that     -> core build
 
 Every method must return a non-empty string and must never raise - DisplayText
