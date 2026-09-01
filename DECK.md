@@ -23,9 +23,10 @@ Screens:
   and the two events after it.
 - **Voice** - Discord voice channel: who is in it, who is talking right now,
   who just joined, and your own mute state.
-- **League** - phase-driven: summoner spells and skill order once you lock in,
-  starting items for the first 90 seconds, core build after that. Appears on
-  its own at champion lock-in.
+- **League** - appears on its own when the League client opens, and leaves when
+  you close it. Your rank, LP and LP graph between games; then phase-driven:
+  the meta picks for your role in champ select, summoner spells and runes once
+  you lock in, starting items for the first 90 seconds, core build after that.
 - **OTP** - a verification code that just arrived. Not in the cycle: it appears
   on its own and leaves on its own. See below.
 
@@ -444,6 +445,27 @@ child is killed and respawned on every screen switch, so a connection held there
 would reconnect to Gmail every time you pressed Page Down. The supervisor writes
 `cache/otp_state.json` and the child reads it - which is also why the code
 survives the very switch that puts it on screen.
+
+### When the screen appears on its own
+
+`auto_switch` in `deck.yaml` controls this:
+
+```yaml
+auto_switch:
+  enabled: true
+  on_client_open: true      # switch as soon as the client is running
+  on_league_match: true     # only used when on_client_open is false
+  screen: League
+  return_after: true
+```
+
+`on_client_open` is the useful one now that the screen shows a profile between
+games. Set it false to go back to the old behaviour, which only switched from
+champion lock-in until the match ended.
+
+Either way, two consecutive failed polls are required before the panel leaves,
+so one dropped request to the client cannot bounce you off mid-game, and if you
+changed screens by hand meanwhile you are left where you put yourself.
 
 ## Switching cost
 

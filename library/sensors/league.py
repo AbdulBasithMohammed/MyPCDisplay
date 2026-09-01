@@ -370,6 +370,17 @@ def gameflow_phase():
         return None
 
 
+def client_running():
+    """True while the League client is open and answering.
+
+    gameflow_phase() returns None only when there is no lockfile or the LCU
+    does not respond, so "not None" is exactly "the client is up" - no extra
+    endpoint needed. A stale lockfile left behind by a crash fails the request
+    and still reads as closed.
+    """
+    return gameflow_phase() is not None
+
+
 def league_busy():
     """True from lock-in until the match ends, loading screen included."""
     flow = gameflow_phase()

@@ -37,8 +37,9 @@ Cycle with **Page Down** / **Page Up**, or pick one from the tray icon.
 | **League** | Rank profile between games, then a phase-driven build guide — see below |
 | **OTP** | A one-time passcode that just arrived — appears on its own, then leaves |
 
-The **League** screen changes with the state of the match, and switches itself on
-at champion lock-in:
+The **League** screen switches itself on when the League client opens, and back
+to whatever was there when you close it. What it shows follows the state of the
+match:
 
 | Phase | Shows |
 |---|---|

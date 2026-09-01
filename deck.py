@@ -427,17 +427,23 @@ def otp_watch(sup, screen_name, icon=None):
     return notifier
 
 
-def league_watch(sup, screen_name, return_after, icon=None):
-    """Jump to the League screen at champion lock-in, and back when the game ends.
+def league_watch(sup, screen_name, return_after, icon=None, on_client=True):
+    """Jump to the League screen while League is up, and back when it is not.
 
-    "Busy" comes from the client's own gameflow phase, which spans champ select,
-    the loading screen and the match as one state. An earlier version watched
-    champ select and the in-game API separately and bounced the panel back to
-    the previous screen the instant champ select closed, because neither API
-    answers during loading.
+    `on_client` decides what "up" means:
+        True  - the client is open. The screen shows your rank, LP and graph
+                between games, so opening the client is the moment you want it.
+        False - only from champion lock-in to the end of the match, which is
+                what this did before the profile screen existed.
 
-    If you switch screens by hand during a match we leave you there: the return
-    only fires when the League screen is still the one on the panel.
+    Match state comes from the client's own gameflow phase, which spans champ
+    select, the loading screen and the match as one state. An earlier version
+    watched champ select and the in-game API separately and bounced the panel
+    back the instant champ select closed, because neither API answers during
+    loading.
+
+    If you switch screens by hand we leave you there: the return only fires
+    when the League screen is still the one on the panel.
     """
     target = next((i for i, s in enumerate(sup.screens)
                    if s["name"].lower() == str(screen_name).lower()), None)
@@ -445,22 +451,22 @@ def league_watch(sup, screen_name, return_after, icon=None):
         log.warning("League auto-switch: no screen named %r in deck.yaml", screen_name)
         return
 
-    # The client's gameflow phase covers the whole lifecycle in one call.
-    # Watching champ select and the in-game API separately does not work: they
-    # are different APIs with the loading screen in between, so the screen would
-    # flip away right as the match was starting.
     try:
-        from library.sensors.league import league_busy
+        from library.sensors.league import client_running, league_busy
     except Exception:
         log.warning("League sensors unavailable; auto-switch disabled")
         return
+
+    probe = client_running if on_client else league_busy
+    opened = "League client opened" if on_client else "Match started"
+    closed = "League client closed" if on_client else "Match ended"
 
     was_live, previous, misses = False, None, 0
 
     while not sup._stop:
         time.sleep(5)
         try:
-            live = league_busy()
+            live = probe()
         except Exception:
             live = False
 
@@ -476,13 +482,13 @@ def league_watch(sup, screen_name, return_after, icon=None):
         if live and not was_live:
             previous = sup.index
             if sup.index != target:
-                log.info("Match started; switching to %s", sup.screens[target]["name"])
+                log.info("%s; switching to %s", opened, sup.screens[target]["name"])
                 sup.switch_to(target)
                 if icon:
                     icon.update_menu()
         elif not live and was_live:
             if return_after and previous is not None and sup.index == target:
-                log.info("Match ended; returning to %s", sup.screens[previous]["name"])
+                log.info("%s; returning to %s", closed, sup.screens[previous]["name"])
                 sup.switch_to(previous)
                 if icon:
                     icon.update_menu()
@@ -583,10 +589,13 @@ def main():
         notifier[0] = otp_watch(sup, otp_cfg.get("screen", "OTP"), icon)
 
     auto = cfg.get("auto_switch") or {}
-    if auto.get("enabled", True) and auto.get("on_league_match", True):
+    # on_client_open subsumes on_league_match - a match cannot happen without
+    # the client - so only one watcher ever runs.
+    on_client = auto.get("on_client_open", True)
+    if auto.get("enabled", True) and (on_client or auto.get("on_league_match", True)):
         threading.Thread(target=league_watch,
                          args=(sup, auto.get("screen", "League"),
-                               auto.get("return_after", True), icon),
+                               auto.get("return_after", True), icon, on_client),
                          name="league-watch", daemon=True).start()
 
     try:
