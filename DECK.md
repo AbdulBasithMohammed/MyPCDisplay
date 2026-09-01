@@ -178,9 +178,19 @@ league:
   meta_tier: emerald_plus     # bracket the champ-select meta list uses
 ```
 
+Under that sits an **LP history graph** going back to the start of the season,
+with the change over the last 7 and 30 days, and below it your most-played
+champions.
+
 It comes from dpm.lol's public JSON API - no key, no login, and the ID is
 public information rather than a credential. Refreshed every 15 minutes and
 cached on disk, so a failure keeps showing the last good profile.
+
+The graph plots dpm.lol's absolute ladder `score`, not LP: LP resets to 0 on
+every promotion, so plotting it would draw a cliff downward at exactly the
+moments you climbed. The y-axis is zoomed to the data rather than anchored at
+zero, because a season's climb is a few hundred points out of several thousand
+and would otherwise render flat.
 
 In **champ select before you lock in** the screen shows the strongest
 champions in your assigned role, from op.gg's tier list for `meta_tier`. Once

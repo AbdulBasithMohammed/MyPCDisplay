@@ -71,7 +71,7 @@ full-screen blit costs ~1.3 s on this panel.
 | `discord_rpc.py` / `discord_sensors.py` | Discord voice state over the local IPC pipe |
 | `league.py` | Match state, phases, Data Dragon, champ select |
 | `opgg.py` | Scrapes op.gg build pages **and the tier list** (`tierlist()`) |
-| `dpm.py` | Ranked profile from dpm.lol's JSON API, for the idle screen |
+| `dpm.py` | Ranked profile, LP history and recent games from dpm.lol's JSON API |
 | `league_render.py` | Composites the whole League frame with PIL |
 | `league_sensors.py` | Exposes that frame as one `BITMAP` sensor |
 
@@ -98,6 +98,15 @@ full-screen blit costs ~1.3 s on this panel.
   and runes label AFTER the numbers: `pick% games Games Pick rate win% Win rate`
   - the generic parser read that as "no trailing win" and showed the pick rate
   as the win rate until someone noticed on the panel.
+
+- **dpm.lol's per-champion `recentResults` is that champion's history, not
+  yours.** Using it for the "recent games" pips showed W W L L L during a
+  five-game win streak, because the top champion had not been played in it.
+  Real per-game results come from `/v1/players/{puuid}/match-history`, filtered
+  to `queueId == 420`.
+- **Graph `score`, never `leaguePoints`.** LP resets to 0 on promotion, so a
+  climb through a tier boundary plots as a cliff downward. `score` is absolute
+  and continuous across tiers.
 
 ## League screen phases
 

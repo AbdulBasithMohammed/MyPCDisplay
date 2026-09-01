@@ -414,6 +414,72 @@ def _pips(d, results, x, y, size=11, gap=4):
     return x
 
 
+def _lp_graph(img, d, history, box, lp_30d=None, lp_7d=None):
+    """Ladder score over time, as a filled sparkline.
+
+    Plots `score`, not leaguePoints: LP resets to 0 on every promotion, so
+    graphing it draws a cliff at each tier change where the player actually
+    went up. score is continuous across tiers.
+
+    The y-axis is deliberately zoomed to the data range rather than anchored
+    at zero - a season's climb is a few hundred points out of thousands, and
+    a zero-based axis renders it as a flat line.
+    """
+    x0, y0, x1, y1 = box
+    d.rounded_rectangle(box, 14, fill=CARD, outline=CARD_EDGE)
+    d.text((x0 + 12, y0 + 10), "LP HISTORY", font=font(F_BOLD, 12), fill=MUTED)
+
+    # Deltas read as "last 7d +102", coloured by direction.
+    tx = x1 - 12
+    for label, value in (("7d", lp_7d), ("30d", lp_30d)):
+        if value is None:
+            continue
+        text = "%s%d" % ("+" if value >= 0 else "-", abs(value))
+        f = font(F_BOLD, 12)
+        tx -= d.textlength(text, font=f)
+        d.text((tx, y0 + 10), text, font=f,
+               fill=GOOD if value >= 0 else (208, 92, 92))
+        tx -= 4
+        lf = font(F_REG, 10)
+        tx -= d.textlength(label, font=lf)
+        d.text((tx, y0 + 11), label, font=lf, fill=MUTED)
+        tx -= 10
+
+    scores = [h.get("score") for h in (history or []) if h.get("score") is not None]
+    px0, py0 = x0 + 12, y0 + 30
+    px1, py1 = x1 - 12, y1 - 12
+    if len(scores) < 2:
+        _center(d, "no ranked history yet", (x0 + x1) / 2, (py0 + py1) / 2 - 8,
+                font(F_REG, 12), MUTED)
+        return
+
+    lo, hi = min(scores), max(scores)
+    span = max(hi - lo, 1)
+    step = (px1 - px0) / (len(scores) - 1)
+
+    def point(i, value):
+        return (px0 + i * step,
+                py1 - (value - lo) / span * (py1 - py0))
+
+    pts = [point(i, v) for i, v in enumerate(scores)]
+
+    # Fill under the line first, then the line over it.
+    d.polygon([(px0, py1)] + pts + [(px1, py1)], fill=(226, 245, 234))
+    d.line(pts, fill=GOOD, width=2, joint="curve")
+
+    # Mark the latest point so the current position reads at a glance.
+    lx, ly = pts[-1]
+    d.ellipse((lx - 3, ly - 3, lx + 3, ly + 3), fill=GOOD,
+              outline=(255, 255, 255))
+
+    # Peak, right-aligned under the line, from the same series being drawn.
+    peak = max((h for h in history if h.get("score") is not None),
+               key=lambda h: h["score"])
+    if peak.get("tier"):
+        _right(d, "peak %s %s" % (peak["tier"], peak.get("rank") or ""),
+               px1, py1 - 12, font(F_REG, 9), MUTED)
+
+
 def _idle(img, d, ready=True, profile=None):
     """Between games: the ranked profile, or a plain waiting card without one.
 
@@ -433,78 +499,89 @@ def _idle(img, d, ready=True, profile=None):
     # ---- rank card -------------------------------------------------------
     # Emblem first, like dpm.lol: the crest is what you recognise at a glance
     # from across the desk, before any of the text resolves.
-    d.rounded_rectangle((8, 8, W - 8, 116), 14, fill=CARD, outline=CARD_EDGE)
+    d.rounded_rectangle((8, 8, W - 8, 104), 14, fill=CARD, outline=CARD_EDGE)
     tier = profile.get("tier") or ""
     colour = TIER_COLOR.get(tier, ACCENT)
 
-    emblem = rank_emblem(tier, 84)
+    emblem = rank_emblem(tier, 76)
     if emblem is not None:
-        paste_alpha(img, emblem, (16, 18))
-        tx = 106
+        paste_alpha(img, emblem, (14, 18))
+        tx = 96
     else:
         # No emblem (offline, or an unranked account): keep the coloured spine
         # so the card does not lose its left edge.
-        d.rounded_rectangle((20, 22, 26, 102), 3, fill=colour)
+        d.rounded_rectangle((20, 20, 26, 92), 3, fill=colour)
         tx = 38
 
     rank_text = "%s %s" % (tier, profile.get("division") or "")
-    d.text((tx, 24), rank_text.strip(), font=font(F_BOLD, 26), fill=colour)
+    d.text((tx, 20), rank_text.strip(), font=font(F_BOLD, 24), fill=colour)
     lp = profile.get("lp")
     if lp is not None:
-        d.text((tx, 58), "%d LP" % lp, font=font(F_BOLD, 15), fill=NAVY)
+        d.text((tx, 50), "%d LP" % lp, font=font(F_BOLD, 14), fill=NAVY)
 
     wins, losses = profile.get("wins") or 0, profile.get("losses") or 0
     wr = profile.get("winrate")
     if wins or losses:
-        d.text((tx, 80), "%dW %dL" % (wins, losses), font=font(F_REG, 12), fill=MUTED)
+        d.text((tx, 72), "%dW %dL" % (wins, losses), font=font(F_REG, 11), fill=MUTED)
         if wr is not None:
-            x = tx + d.textlength("%dW %dL  " % (wins, losses), font=font(F_REG, 12))
-            d.text((x, 80), "%d%%" % wr, font=font(F_BOLD, 12),
+            x = tx + d.textlength("%dW %dL  " % (wins, losses), font=font(F_REG, 11))
+            d.text((x, 72), "%d%%" % wr, font=font(F_BOLD, 11),
                    fill=GOOD if wr >= 52 else MUTED)
 
     # Ladder position, right-aligned so it never collides with the rank text.
     ladder, top = profile.get("ladder"), profile.get("ladder_top")
     if ladder:
-        _right(d, "{:,}".format(int(ladder)), XR, 26, font(F_BOLD, 17), NAVY)
-        _right(d, "LADDER RANK", XR, 47, font(F_REG, 9), MUTED)
-    if top:
-        _right(d, "top %.1f%%" % float(top), XR, 64, font(F_BOLD, 12), ACCENT)
+        _right(d, "{:,}".format(int(ladder)), XR, 20, font(F_BOLD, 16), NAVY)
+        line = "LADDER RANK"
+        if top:
+            line += "  top %.2f%%" % float(top)
+        _right(d, line, XR, 40, font(F_REG, 9), MUTED)
+
+    form = profile.get("form") or {}
+    if form:
+        _right(d, "LAST %d GAMES" % form["games"], XR, 58, font(F_REG, 9), MUTED)
+        fwr = form.get("winrate")
+        text = "%dW %dL" % (form.get("wins") or 0, form.get("losses") or 0)
+        _right(d, text, XR, 70, font(F_REG, 11), MUTED)
+        x = XR - d.textlength(text, font=font(F_REG, 11)) - 6
+        pct = "%d%%" % fwr
+        d.text((x - d.textlength(pct, font=font(F_BOLD, 11)), 70), pct,
+               font=font(F_BOLD, 11), fill=GOOD if fwr >= 50 else (208, 92, 92))
+
     if profile.get("recent"):
-        _right(d, "RECENT", XR, 84, font(F_REG, 9), MUTED)
-        _pips(d, profile["recent"], XR - 79, 96)
+        _pips(d, profile["recent"], XR - 79, 86)
+
+    # ---- LP graph --------------------------------------------------------
+    _lp_graph(img, d, profile.get("history"), (8, 110, W - 8, 206),
+              lp_30d=profile.get("lp_30d"), lp_7d=profile.get("lp_7d"))
 
     # ---- most played -----------------------------------------------------
-    d.rounded_rectangle((8, 124, W - 8, H - 8), 14, fill=CARD, outline=CARD_EDGE)
-    d.text((20, 136), "MOST PLAYED", font=font(F_BOLD, 12), fill=MUTED)
+    d.rounded_rectangle((8, 212, W - 8, H - 8), 14, fill=CARD, outline=CARD_EDGE)
+    d.text((20, 222), "MOST PLAYED", font=font(F_BOLD, 12), fill=MUTED)
     name = profile.get("name") or ""
     if name:
-        _right(d, "%s#%s" % (name, profile.get("tag") or ""), W - 20, 136,
+        _right(d, "%s#%s" % (name, profile.get("tag") or ""), W - 20, 222,
                font(F_REG, 10), MUTED)
-    d.line((20, 154, W - 20, 154), fill=CARD_EDGE, width=1)
+    d.line((20, 238, W - 20, 238), fill=CARD_EDGE, width=1)
 
-    y = 164
+    y = 246
     for c in (profile.get("champions") or [])[:3]:
-        paste(img, champ_icon(c.get("champion"), 34), (20, y), 34, radius=8)
-        d.text((62, y + 1), _ellipsize(d, _display_name(c), font(F_BOLD, 14), 96),
-               font=font(F_BOLD, 14), fill=NAVY)
-        d.text((62, y + 19), "%d games" % (c.get("games") or 0),
+        paste(img, champ_icon(c.get("champion"), 20), (20, y), 20, radius=5)
+        d.text((48, y + 3), _ellipsize(d, _display_name(c), font(F_BOLD, 12), 88),
+               font=font(F_BOLD, 12), fill=NAVY)
+        d.text((146, y + 4), "%dg" % (c.get("games") or 0),
                font=font(F_REG, 10), fill=MUTED)
 
         wr_c = c.get("winrate") or 0
-        d.text((186, y + 1), "%d%%" % wr_c, font=font(F_BOLD, 14),
+        d.text((190, y + 3), "%d%%" % wr_c, font=font(F_BOLD, 12),
                fill=GOOD if wr_c >= 52 else NAVY)
-        d.text((186, y + 19), "win rate", font=font(F_REG, 9), fill=MUTED)
 
-        d.text((260, y + 1), "%.1f" % (c.get("kda") or 0),
-               font=font(F_BOLD, 14), fill=NAVY)
-        d.text((260, y + 19), "KDA", font=font(F_REG, 9), fill=MUTED)
-
+        d.text((240, y + 4), "%.1f KDA" % (c.get("kda") or 0),
+               font=font(F_REG, 11), fill=NAVY)
         _right(d, "%.1f / %.1f / %.1f" % (c.get("kills") or 0, c.get("deaths") or 0,
                                           c.get("assists") or 0),
-               XR, y + 1, font(F_REG, 12), NAVY)
-        _right(d, "%.1f cs/m" % (c.get("csm") or 0), XR, y + 19,
-               font(F_REG, 9), MUTED)
-        y += 44
+               XR, y + 4, font(F_REG, 11), MUTED)
+        y += 23
 
 
 def _meta(img, d, rows, role):
@@ -621,7 +698,10 @@ def state_key(champion, role, phase, build):
         return "|".join(["idle", str(Static.ready), str(p.get("tier")),
                          str(p.get("division")), str(p.get("lp")),
                          str(p.get("wins")), str(p.get("losses")),
-                         str(p.get("ladder")),
+                         str(p.get("ladder")), str(p.get("lp_7d")),
+                         str(p.get("lp_30d")), str(len(p.get("history") or [])),
+                         str((p.get("history") or [{}])[-1].get("score")),
+                         str((p.get("form") or {}).get("wins")),
                          ",".join("%s%s%s" % (c.get("champion"), c.get("games"),
                                               c.get("winrate"))
                                   for c in (p.get("champions") or [])),
