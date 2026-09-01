@@ -186,6 +186,11 @@ It comes from dpm.lol's public JSON API - no key, no login, and the ID is
 public information rather than a credential. Refreshed every 15 minutes and
 cached on disk, so a failure keeps showing the last good profile.
 
+Each segment of the line is drawn in the colour of the tier you were in at
+that point - green through an emerald stretch, blue-purple through a diamond
+one - so a promotion or a demotion is visible as a colour change rather than
+needing a legend.
+
 The graph plots dpm.lol's absolute ladder `score`, not LP: LP resets to 0 on
 every promotion, so plotting it would draw a cliff downward at exactly the
 moments you climbed. The y-axis is zoomed to the data rather than anchored at

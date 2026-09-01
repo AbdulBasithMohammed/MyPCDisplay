@@ -380,12 +380,20 @@ def _late(img, d, b):
         y += 42
 
 
+# Roughly the in-client tier colours, which is what makes a segment readable
+# without a legend - a League player already knows emerald is green and
+# diamond is the blue-purple.
 TIER_COLOR = {
-    "Iron": (110, 110, 110), "Bronze": (156, 106, 70), "Silver": (140, 158, 170),
-    "Gold": (206, 160, 60), "Platinum": (60, 170, 168), "Emerald": (48, 158, 108),
-    "Diamond": (86, 128, 220), "Master": (150, 90, 200),
-    "Grandmaster": (198, 78, 78), "Challenger": (72, 156, 214),
+    "Iron": (118, 118, 118), "Bronze": (156, 106, 70), "Silver": (140, 158, 170),
+    "Gold": (206, 160, 60), "Platinum": (60, 170, 168), "Emerald": (46, 168, 110),
+    "Diamond": (118, 122, 226), "Master": (162, 88, 208),
+    "Grandmaster": (204, 74, 74), "Challenger": (72, 176, 226),
 }
+
+
+def _tint(colour, amount=0.82):
+    """Wash a colour towards white, for the fill under a line of that colour."""
+    return tuple(int(c + (255 - c) * amount) for c in colour)
 
 
 def _display_name(champ):
@@ -445,39 +453,46 @@ def _lp_graph(img, d, history, box, lp_30d=None, lp_7d=None):
         d.text((tx, y0 + 11), label, font=lf, fill=MUTED)
         tx -= 10
 
-    scores = [h.get("score") for h in (history or []) if h.get("score") is not None]
+    points = [h for h in (history or []) if h.get("score") is not None]
     px0, py0 = x0 + 12, y0 + 30
     px1, py1 = x1 - 12, y1 - 12
-    if len(scores) < 2:
+    if len(points) < 2:
         _center(d, "no ranked history yet", (x0 + x1) / 2, (py0 + py1) / 2 - 8,
                 font(F_REG, 12), MUTED)
         return
 
+    scores = [h["score"] for h in points]
     lo, hi = min(scores), max(scores)
     span = max(hi - lo, 1)
-    step = (px1 - px0) / (len(scores) - 1)
+    step = (px1 - px0) / (len(points) - 1)
+    xy = [(px0 + i * step, py1 - (v - lo) / span * (py1 - py0))
+          for i, v in enumerate(scores)]
 
-    def point(i, value):
-        return (px0 + i * step,
-                py1 - (value - lo) / span * (py1 - py0))
-
-    pts = [point(i, v) for i, v in enumerate(scores)]
-
-    # Fill under the line first, then the line over it.
-    d.polygon([(px0, py1)] + pts + [(px1, py1)], fill=(226, 245, 234))
-    d.line(pts, fill=GOOD, width=2, joint="curve")
+    # Draw per segment, coloured by the tier you were in - the colour change
+    # IS the tier change, which is why this needs no legend. Fill first for
+    # the whole segment, then the stroke, so neighbouring fills cannot paint
+    # over a line that was already drawn.
+    seg_colours = [TIER_COLOR.get(h.get("tier") or "", ACCENT) for h in points]
+    for i in range(len(xy) - 1):
+        colour = seg_colours[i + 1]     # the tier you ended the segment in
+        (ax, ay), (bx, by) = xy[i], xy[i + 1]
+        d.polygon([(ax, ay), (bx, by), (bx, py1), (ax, py1)],
+                  fill=_tint(colour))
+    for i in range(len(xy) - 1):
+        d.line([xy[i], xy[i + 1]], fill=seg_colours[i + 1], width=2)
 
     # Mark the latest point so the current position reads at a glance.
-    lx, ly = pts[-1]
-    d.ellipse((lx - 3, ly - 3, lx + 3, ly + 3), fill=GOOD,
+    lx, ly = xy[-1]
+    latest = seg_colours[-1]
+    d.ellipse((lx - 3, ly - 3, lx + 3, ly + 3), fill=latest,
               outline=(255, 255, 255))
 
-    # Peak, right-aligned under the line, from the same series being drawn.
-    peak = max((h for h in history if h.get("score") is not None),
-               key=lambda h: h["score"])
+    # Peak, in its own tier colour so it matches the segment it belongs to.
+    peak = max(points, key=lambda h: h["score"])
     if peak.get("tier"):
         _right(d, "peak %s %s" % (peak["tier"], peak.get("rank") or ""),
-               px1, py1 - 12, font(F_REG, 9), MUTED)
+               px1, py1 - 12, font(F_BOLD, 9),
+               TIER_COLOR.get(peak["tier"], MUTED))
 
 
 def _idle(img, d, ready=True, profile=None):
