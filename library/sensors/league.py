@@ -423,6 +423,39 @@ def champ_select():
     return None
 
 
+def current_riot_id():
+    """('3mperor', 'bhsdk') for whoever is signed into the client, or None.
+
+    Lets the profile screen follow the account actually in use instead of a
+    single name in services.yaml. Returns None whenever the client is closed,
+    which is most of the time, so the caller must have a fallback.
+    """
+    lock = _lockfile()
+    if not lock:
+        return None
+    try:
+        s = _session()
+        r = s.get("%s://127.0.0.1:%s/lol-summoner/v1/current-summoner"
+                  % (lock["proto"], lock["port"]),
+                  auth=("riot", lock["password"]), timeout=3)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        name = (data.get("gameName") or "").strip()
+        tag = (data.get("tagLine") or "").strip()
+        if name and tag:
+            return name, tag
+        # Older clients only expose "Name#TAG" as displayName.
+        shown = (data.get("displayName") or "").strip()
+        if "#" in shown:
+            name, _, tag = shown.partition("#")
+            if name.strip() and tag.strip():
+                return name.strip(), tag.strip()
+    except Exception:
+        pass
+    return None
+
+
 def assigned_position():
     """Your lane in champ select, before any pick is locked in.
 

@@ -168,9 +168,14 @@ it across - otherwise every refresh blanked whoever was mid-sentence.
 
 ## League screen
 
-Between games the screen shows your **ranked profile** - tier, LP, W/L, ladder
-position and your three most-played champions - instead of an empty "No match"
-card. That needs your Riot ID in `services.yaml`:
+Between games the screen shows your **ranked profile** instead of an empty
+"No match" card: the top half is the account name, rank emblem, LP, W/L,
+ladder position, last-30-games form and your recent results; the bottom half
+is the LP graph.
+
+**It follows whoever is signed into the League client.** When the client is
+closed - which is most of the time - it falls back to the Riot ID in
+`services.yaml`:
 
 ```yaml
 league:
@@ -178,9 +183,8 @@ league:
   meta_tier: emerald_plus     # bracket the champ-select meta list uses
 ```
 
-Under that sits an **LP history graph** going back to the start of the season,
-with the change over the last 7 and 30 days, and below it your most-played
-champions.
+The **LP history graph** goes back to the start of the season, with the change
+over the last 7 and 30 days.
 
 It comes from dpm.lol's public JSON API - no key, no login, and the ID is
 public information rather than a credential. Refreshed every 15 minutes and

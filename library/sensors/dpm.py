@@ -7,7 +7,6 @@ WHY THIS SOURCE
     and no bot challenge - verified endpoints:
 
         /v1/players/search?gameName=&tagLine=      puuid, ranks[]
-        /v1/players/{puuid}/champions              per-champion aggregates
         /v1/players/{puuid}/match-history          real per-game results
         /v1/players/{puuid}/widgets/rank-history   daily LP/score points
         /v1/players/{puuid}/widgets/recent-performances   last-30 form
@@ -23,10 +22,11 @@ WHY THIS SOURCE
     empty profile; the screen degrades to "no profile" rather than breaking.
 
 BEING A GOOD CITIZEN
-    Five requests per REFRESH_SECONDS (15 min) while the screen is idle, all
+    Four requests per REFRESH_SECONDS (15 min) while the screen is idle, all
     cached on disk. dpm.lol rate-limits bursts hard, so do not lower that.
 """
 import json
+import logging
 import os
 import threading
 import time
@@ -35,6 +35,8 @@ APP_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)
 SERVICES_FILE = os.path.join(APP_DIR, "services.yaml")
 CACHE_DIR = os.path.join(APP_DIR, "cache")
 CACHE_FILE = os.path.join(CACHE_DIR, "dpm_profile.json")
+
+log = logging.getLogger(__name__)
 
 BASE = "https://dpm.lol"
 TIMEOUT = 20
@@ -45,6 +47,9 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 # quick - and dpm.lol rate-limits a burst of requests hard.
 REFRESH_SECONDS = 15 * 60
 RETRY_SECONDS = 60
+# How often to re-read which account is signed in. Cheap: a local lockfile
+# read, plus one loopback call only while the client is running.
+ACCOUNT_POLL_SECONDS = 10
 
 SOLO = "RANKED_SOLO_5x5"
 QUEUE_SOLO_ID = 420          # ranked solo/duo; match-history also carries 400/440
@@ -60,7 +65,7 @@ def _cfg():
         return {}
 
 
-def riot_id():
+def configured_riot_id():
     """('3mperor', 'bhsdk') from services.yaml, or (None, None)."""
     cfg = _cfg()
     raw = str(cfg.get("riot_id") or "").strip()
@@ -70,6 +75,23 @@ def riot_id():
         if name and tag:
             return name, tag
     return None, None
+
+
+def riot_id():
+    """Whose profile to show: the signed-in account, else services.yaml.
+
+    The client wins when it is running, so the screen follows whichever
+    account you actually logged into. It is shut most of the time, which is
+    exactly when the configured id has to carry it.
+    """
+    try:
+        from library.sensors.league import current_riot_id
+        live = current_riot_id()
+        if live:
+            return live
+    except Exception:
+        pass
+    return configured_riot_id()
 
 
 def _get(session, path, **params):
@@ -126,32 +148,6 @@ def fetch(name, tag):
     wins, losses = int(solo.get("wins") or 0), int(solo.get("losses") or 0)
     total = wins + losses
 
-    champions = []
-    try:
-        rows = _get(s, "/v1/players/%s/champions" % puuid, queue=SOLO)
-        # Ranked by games played: "what I actually play" is more use on a desk
-        # panel than a 100% win rate over two games.
-        rows = sorted(rows or [], key=lambda c: -(c.get("gamesPlayed") or 0))
-        for c in rows[:3]:
-            played = int(c.get("gamesPlayed") or 0)
-            champions.append({
-                # Internal name ("XinZhao"); the renderer resolves it to the
-                # display name ("Xin Zhao") through Data Dragon, which this
-                # module deliberately does not depend on.
-                "champion": c.get("championName") or "?",
-                "champion_id": str(c.get("championId") or ""),
-                "games": played,
-                "wins": int(c.get("win") or 0),
-                "winrate": round(float(c.get("winrate") or 0)),
-                "kda": round(float(c.get("kda") or 0), 1),
-                "kills": round(float(c.get("kills") or 0), 1),
-                "deaths": round(float(c.get("deaths") or 0), 1),
-                "assists": round(float(c.get("assists") or 0), 1),
-                "csm": round(float(c.get("csm") or 0), 1),
-            })
-    except Exception:
-        pass
-
     # Real per-game results, newest first. The champion endpoint also carries a
     # recentResults list, but it is that ONE champion's history - using it made
     # the panel show W W L L L during a five-game win streak.
@@ -207,7 +203,7 @@ def fetch(name, tag):
         pass
 
     return {
-        "v": 2,
+        "v": 3,
         "at": time.time(),
         "name": player.get("gameName") or name,
         "tag": player.get("tagLine") or tag,
@@ -220,7 +216,6 @@ def fetch(name, tag):
         "winrate": round(wins / total * 100) if total else None,
         "ladder": solo.get("rankPosition"),
         "ladder_top": solo.get("rankTop"),
-        "champions": champions,
         "recent": recent[:5],
         "history": history,
         "lp_30d": lp_30d,
@@ -259,7 +254,7 @@ class Profile:
         try:
             with open(CACHE_FILE, encoding="utf-8") as f:
                 cached = json.load(f)
-            if cached.get("v") == 2:
+            if cached.get("v") == 3:
                 cls.data = cached
                 cls.status = "cached"
         except Exception:
@@ -278,13 +273,27 @@ class Profile:
 
     @classmethod
     def _loop(cls):
+        last_id, due_at = None, 0.0
         while True:
+            # The account is re-read often but the profile is only re-fetched
+            # on a real change or when it goes stale: signing into a different
+            # account should swap the screen within seconds, not after the
+            # full 15-minute refresh.
             name, tag = riot_id()
             if not name:
                 cls.status = "no riot_id"
                 cls.error = "set league.riot_id in services.yaml"
-                time.sleep(REFRESH_SECONDS)
+                time.sleep(ACCOUNT_POLL_SECONDS)
                 continue
+
+            changed = (name, tag) != last_id
+            if not changed and time.time() < due_at:
+                time.sleep(ACCOUNT_POLL_SECONDS)
+                continue
+            if changed and last_id is not None:
+                log.info("League account changed to %s#%s; reloading profile",
+                         name, tag)
+
             try:
                 payload = fetch(name, tag)
                 if payload:
@@ -292,11 +301,13 @@ class Profile:
                     cls.status = "ok"
                     cls.error = ""
                     cls._save_cache(payload)
-                    time.sleep(REFRESH_SECONDS)
+                    last_id = (name, tag)
+                    due_at = time.time() + REFRESH_SECONDS
                     continue
                 cls.error = "no profile returned"
             except Exception as e:
                 cls.error = str(e)[:80]
             # Keep serving whatever we already have rather than blanking it.
             cls.status = "stale" if cls.data else "error"
-            time.sleep(RETRY_SECONDS)
+            last_id = (name, tag)
+            due_at = time.time() + RETRY_SECONDS

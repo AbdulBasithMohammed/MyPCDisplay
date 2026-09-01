@@ -11,7 +11,7 @@ the content only changes when the *phase* changes, and the output filename
 carries a hash of the state, so an unchanged screen is never redrawn.
 
 Phases, and what each one answers:
-    idle         how am I doing?          rank, LP, W/L, most-played champions
+    idle         how am I doing?          account, rank, LP, and the LP graph
     meta         what should I pick?      op.gg tier list for my role
     champselect  what do I take?          summoner spells + runes
     early        what do I buy first?     starting items + boots + skill order
@@ -396,21 +396,6 @@ def _tint(colour, amount=0.82):
     return tuple(int(c + (255 - c) * amount) for c in colour)
 
 
-def _display_name(champ):
-    """'XinZhao' -> 'Xin Zhao'. dpm.lol reports Riot's internal names.
-
-    Data Dragon keys champions by that internal name and carries the pretty
-    one, so the id lookup is only a fallback for anything it does not know.
-    """
-    internal = champ.get("champion") or "?"
-    try:
-        # champ_by_id carries the display name; Static.champs is keyed by the
-        # internal name but holds only the stat block, so it is no use here.
-        return Static.champ_by_id.get(str(champ.get("champion_id") or "")) or internal
-    except Exception:
-        return internal
-
-
 def _pips(d, results, x, y, size=11, gap=4):
     """Recent results as W/L squares, newest first."""
     for won in results[:5]:
@@ -511,92 +496,73 @@ def _idle(img, d, ready=True, profile=None):
         d.rounded_rectangle((W / 2 - 40, 210, W / 2 + 40, 214), 2, fill=TRACK)
         return
 
-    # ---- rank card -------------------------------------------------------
+    # ---- rank card, top half --------------------------------------------
     # Emblem first, like dpm.lol: the crest is what you recognise at a glance
     # from across the desk, before any of the text resolves.
-    d.rounded_rectangle((8, 8, W - 8, 104), 14, fill=CARD, outline=CARD_EDGE)
+    d.rounded_rectangle((8, 8, W - 8, 156), 14, fill=CARD, outline=CARD_EDGE)
     tier = profile.get("tier") or ""
     colour = TIER_COLOR.get(tier, ACCENT)
 
-    emblem = rank_emblem(tier, 76)
+    emblem = rank_emblem(tier, 104)
     if emblem is not None:
-        paste_alpha(img, emblem, (14, 18))
-        tx = 96
+        paste_alpha(img, emblem, (16, 30))
+        tx = 132
     else:
         # No emblem (offline, or an unranked account): keep the coloured spine
         # so the card does not lose its left edge.
-        d.rounded_rectangle((20, 20, 26, 92), 3, fill=colour)
-        tx = 38
+        d.rounded_rectangle((20, 30, 26, 134), 3, fill=colour)
+        tx = 40
+
+    # Account name leads: this screen is "who am I and how am I doing".
+    name = profile.get("name") or ""
+    if name:
+        f_name = font(F_BOLD, 21)
+        d.text((tx, 22), _ellipsize(d, name, f_name, 200), font=f_name, fill=NAVY)
+        d.text((tx + d.textlength(_ellipsize(d, name, f_name, 200), font=f_name) + 5, 30),
+               "#%s" % (profile.get("tag") or ""), font=font(F_REG, 12), fill=MUTED)
 
     rank_text = "%s %s" % (tier, profile.get("division") or "")
-    d.text((tx, 20), rank_text.strip(), font=font(F_BOLD, 24), fill=colour)
+    d.text((tx, 54), rank_text.strip(), font=font(F_BOLD, 27), fill=colour)
     lp = profile.get("lp")
     if lp is not None:
-        d.text((tx, 50), "%d LP" % lp, font=font(F_BOLD, 14), fill=NAVY)
+        d.text((tx, 90), "%d LP" % lp, font=font(F_BOLD, 15), fill=NAVY)
 
     wins, losses = profile.get("wins") or 0, profile.get("losses") or 0
     wr = profile.get("winrate")
     if wins or losses:
-        d.text((tx, 72), "%dW %dL" % (wins, losses), font=font(F_REG, 11), fill=MUTED)
+        d.text((tx, 114), "%dW %dL" % (wins, losses), font=font(F_REG, 12), fill=MUTED)
         if wr is not None:
-            x = tx + d.textlength("%dW %dL  " % (wins, losses), font=font(F_REG, 11))
-            d.text((x, 72), "%d%%" % wr, font=font(F_BOLD, 11),
+            x = tx + d.textlength("%dW %dL  " % (wins, losses), font=font(F_REG, 12))
+            d.text((x, 114), "%d%%" % wr, font=font(F_BOLD, 12),
                    fill=GOOD if wr >= 52 else MUTED)
 
     # Ladder position, right-aligned so it never collides with the rank text.
     ladder, top = profile.get("ladder"), profile.get("ladder_top")
     if ladder:
-        _right(d, "{:,}".format(int(ladder)), XR, 20, font(F_BOLD, 16), NAVY)
+        _right(d, "{:,}".format(int(ladder)), XR, 24, font(F_BOLD, 20), NAVY)
         line = "LADDER RANK"
         if top:
             line += "  top %.2f%%" % float(top)
-        _right(d, line, XR, 40, font(F_REG, 9), MUTED)
+        _right(d, line, XR, 48, font(F_REG, 9), MUTED)
 
     form = profile.get("form") or {}
     if form:
-        _right(d, "LAST %d GAMES" % form["games"], XR, 58, font(F_REG, 9), MUTED)
+        _right(d, "LAST %d GAMES" % form["games"], XR, 72, font(F_REG, 9), MUTED)
         fwr = form.get("winrate")
         text = "%dW %dL" % (form.get("wins") or 0, form.get("losses") or 0)
-        _right(d, text, XR, 70, font(F_REG, 11), MUTED)
-        x = XR - d.textlength(text, font=font(F_REG, 11)) - 6
+        _right(d, text, XR, 86, font(F_REG, 12), MUTED)
+        x = XR - d.textlength(text, font=font(F_REG, 12)) - 6
         pct = "%d%%" % fwr
-        d.text((x - d.textlength(pct, font=font(F_BOLD, 11)), 70), pct,
-               font=font(F_BOLD, 11), fill=GOOD if fwr >= 50 else (208, 92, 92))
+        d.text((x - d.textlength(pct, font=font(F_BOLD, 13)), 85), pct,
+               font=font(F_BOLD, 13), fill=GOOD if fwr >= 50 else (208, 92, 92))
 
     if profile.get("recent"):
-        _pips(d, profile["recent"], XR - 79, 86)
+        _right(d, "RECENT", XR, 110, font(F_REG, 9), MUTED)
+        _pips(d, profile["recent"], XR - 79, 124, size=12)
 
-    # ---- LP graph --------------------------------------------------------
-    _lp_graph(img, d, profile.get("history"), (8, 110, W - 8, 206),
+    # ---- LP graph, bottom half ------------------------------------------
+    _lp_graph(img, d, profile.get("history"), (8, 164, W - 8, H - 8),
               lp_30d=profile.get("lp_30d"), lp_7d=profile.get("lp_7d"))
-
-    # ---- most played -----------------------------------------------------
-    d.rounded_rectangle((8, 212, W - 8, H - 8), 14, fill=CARD, outline=CARD_EDGE)
-    d.text((20, 222), "MOST PLAYED", font=font(F_BOLD, 12), fill=MUTED)
-    name = profile.get("name") or ""
-    if name:
-        _right(d, "%s#%s" % (name, profile.get("tag") or ""), W - 20, 222,
-               font(F_REG, 10), MUTED)
-    d.line((20, 238, W - 20, 238), fill=CARD_EDGE, width=1)
-
-    y = 246
-    for c in (profile.get("champions") or [])[:3]:
-        paste(img, champ_icon(c.get("champion"), 20), (20, y), 20, radius=5)
-        d.text((48, y + 3), _ellipsize(d, _display_name(c), font(F_BOLD, 12), 88),
-               font=font(F_BOLD, 12), fill=NAVY)
-        d.text((146, y + 4), "%dg" % (c.get("games") or 0),
-               font=font(F_REG, 10), fill=MUTED)
-
-        wr_c = c.get("winrate") or 0
-        d.text((190, y + 3), "%d%%" % wr_c, font=font(F_BOLD, 12),
-               fill=GOOD if wr_c >= 52 else NAVY)
-
-        d.text((240, y + 4), "%.1f KDA" % (c.get("kda") or 0),
-               font=font(F_REG, 11), fill=NAVY)
-        _right(d, "%.1f / %.1f / %.1f" % (c.get("kills") or 0, c.get("deaths") or 0,
-                                          c.get("assists") or 0),
-               XR, y + 4, font(F_REG, 11), MUTED)
-        y += 23
 
 
 def _meta(img, d, rows, role):
@@ -717,9 +683,9 @@ def state_key(champion, role, phase, build):
                          str(p.get("lp_30d")), str(len(p.get("history") or [])),
                          str((p.get("history") or [{}])[-1].get("score")),
                          str((p.get("form") or {}).get("wins")),
-                         ",".join("%s%s%s" % (c.get("champion"), c.get("games"),
-                                              c.get("winrate"))
-                                  for c in (p.get("champions") or [])),
+                         # The account is part of the key: signing into a
+                         # different one must redraw, not reuse the old frame.
+                         str(p.get("name")), str(p.get("tag")),
                          ",".join("1" if r else "0" for r in (p.get("recent") or []))])
     if phase == "meta":
         rows = _meta_rows(role)

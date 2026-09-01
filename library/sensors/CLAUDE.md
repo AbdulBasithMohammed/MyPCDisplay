@@ -114,7 +114,7 @@ full-screen blit costs ~1.3 s on this panel.
 
 | Phase | When | Shows |
 |---|---|---|
-| `idle` | no game, not in champ select | rank, LP, W/L, ladder, most-played (`dpm.py`) |
+| `idle` | no game, not in champ select | account, rank, LP, W/L, ladder + LP graph (`dpm.py`) |
 | `meta` | in champ select, **nothing locked in yet** | op.gg tier list for your assigned role |
 | `champselect` | pick completed | summoner spells and runes |
 | `early` | first `EARLY_SECONDS` (90s) | starting items, boots, skill order |
