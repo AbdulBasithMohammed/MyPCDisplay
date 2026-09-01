@@ -38,8 +38,10 @@ W, H = 480, 320
 ICON_DIR = os.path.join(CACHE_DIR, "icons")
 OUT_DIR = os.path.join(CACHE_DIR, "frames")
 
-# op.gg hosts the rune art; Data Dragon does not serve perks at a simple path.
-OPGG_IMG = "https://opgg-static.akamaized.net/meta/images/lol"
+# op.gg hosts the rune art and the ranked emblems; Data Dragon serves neither
+# at a simple path (Riot's own emblems are SVG, which PIL cannot rasterise).
+OPGG_STATIC = "https://opgg-static.akamaized.net"
+OPGG_IMG = OPGG_STATIC + "/meta/images/lol"
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 FONTS = os.path.join(ROOT, "res", "fonts")
@@ -117,6 +119,37 @@ def perk_icon(kind, perk_id, size):
     path = os.path.join(ICON_DIR, "%s_%s_%s.png" % (kind, Static.patch, perk_id))
     url = "%s/%s/%s/%s.png" % (OPGG_IMG, Static.patch, kind, perk_id)
     return _load(_cached(path, url), size)
+
+
+def rank_emblem(tier, size):
+    """The ranked tier emblem, with its transparency intact.
+
+    Deliberately not routed through _load(): that flattens to RGB, which turns
+    the emblem's transparent surround into a black square. Same CDN as the rune
+    art, so no new host.
+    """
+    if not tier:
+        return None
+    slug = str(tier).strip().lower()
+    path = os.path.join(ICON_DIR, "rank_%s.png" % slug)
+    url = "%s/images/medals_new/%s.png" % (OPGG_STATIC, slug)
+    got = _cached(path, url)
+    if not got:
+        return None
+    try:
+        return Image.open(got).convert("RGBA").resize((size, size), Image.LANCZOS)
+    except Exception:
+        return None
+
+
+def paste_alpha(img, icon, xy):
+    """Paste an RGBA icon using its own alpha, so the card shows through."""
+    if icon is None:
+        return
+    try:
+        img.paste(icon.convert("RGB"), xy, icon.split()[-1])
+    except Exception:
+        pass
 
 
 def item_icon(item_id, size):
@@ -398,23 +431,34 @@ def _idle(img, d, ready=True, profile=None):
         return
 
     # ---- rank card -------------------------------------------------------
+    # Emblem first, like dpm.lol: the crest is what you recognise at a glance
+    # from across the desk, before any of the text resolves.
     d.rounded_rectangle((8, 8, W - 8, 116), 14, fill=CARD, outline=CARD_EDGE)
     tier = profile.get("tier") or ""
     colour = TIER_COLOR.get(tier, ACCENT)
 
-    d.rounded_rectangle((20, 22, 26, 102), 3, fill=colour)
+    emblem = rank_emblem(tier, 84)
+    if emblem is not None:
+        paste_alpha(img, emblem, (16, 18))
+        tx = 106
+    else:
+        # No emblem (offline, or an unranked account): keep the coloured spine
+        # so the card does not lose its left edge.
+        d.rounded_rectangle((20, 22, 26, 102), 3, fill=colour)
+        tx = 38
+
     rank_text = "%s %s" % (tier, profile.get("division") or "")
-    d.text((38, 24), rank_text.strip(), font=font(F_BOLD, 26), fill=colour)
+    d.text((tx, 24), rank_text.strip(), font=font(F_BOLD, 26), fill=colour)
     lp = profile.get("lp")
     if lp is not None:
-        d.text((38, 58), "%d LP" % lp, font=font(F_BOLD, 15), fill=NAVY)
+        d.text((tx, 58), "%d LP" % lp, font=font(F_BOLD, 15), fill=NAVY)
 
     wins, losses = profile.get("wins") or 0, profile.get("losses") or 0
     wr = profile.get("winrate")
     if wins or losses:
-        d.text((38, 80), "%dW %dL" % (wins, losses), font=font(F_REG, 12), fill=MUTED)
+        d.text((tx, 80), "%dW %dL" % (wins, losses), font=font(F_REG, 12), fill=MUTED)
         if wr is not None:
-            x = 38 + d.textlength("%dW %dL  " % (wins, losses), font=font(F_REG, 12))
+            x = tx + d.textlength("%dW %dL  " % (wins, losses), font=font(F_REG, 12))
             d.text((x, 80), "%d%%" % wr, font=font(F_BOLD, 12),
                    fill=GOOD if wr >= 52 else MUTED)
 
