@@ -104,6 +104,12 @@ full-screen blit costs ~1.3 s on this panel.
   five-game win streak, because the top champion had not been played in it.
   Real per-game results come from `/v1/players/{puuid}/match-history`, filtered
   to `queueId == 420`.
+- **Anything from an API must be filtered before it names a file.** dpm.lol's
+  `tier` went straight into a cached emblem filename; a hostile response of
+  `"../../../../deck"` escaped `cache/icons` and `_cached()` would have written
+  the downloaded bytes there. `rank_emblem()` now accepts only the ten known
+  tier slugs. `dd_icon()` filters characters for the same reason - follow one
+  of those two patterns for any new cached asset.
 - **Graph `score`, never `leaguePoints`.** LP resets to 0 on promotion, so a
   climb through a tier boundary plots as a cliff downward. `score` is absolute
   and continuous across tiers.

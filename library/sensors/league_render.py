@@ -43,6 +43,12 @@ OUT_DIR = os.path.join(CACHE_DIR, "frames")
 OPGG_STATIC = "https://opgg-static.akamaized.net"
 OPGG_IMG = OPGG_STATIC + "/meta/images/lol"
 
+# The only tier names allowed to name a cached emblem file. See rank_emblem().
+TIER_SLUGS = frozenset((
+    "iron", "bronze", "silver", "gold", "platinum", "emerald",
+    "diamond", "master", "grandmaster", "challenger",
+))
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 FONTS = os.path.join(ROOT, "res", "fonts")
 F_BOLD = os.path.join(FONTS, "malgun", "malgunbd.ttf")
@@ -130,7 +136,14 @@ def rank_emblem(tier, size):
     """
     if not tier:
         return None
+    # `tier` arrives from dpm.lol's JSON, so it is untrusted network input and
+    # must never reach a path unfiltered: "../../../../deck" would resolve out
+    # of cache/ and let a hostile response overwrite a file in the repo. Only
+    # the ten known tiers can name a file - stricter than dd_icon's character
+    # filter, and cheap here because the set is closed.
     slug = str(tier).strip().lower()
+    if slug not in TIER_SLUGS:
+        return None
     path = os.path.join(ICON_DIR, "rank_%s.png" % slug)
     url = "%s/images/medals_new/%s.png" % (OPGG_STATIC, slug)
     got = _cached(path, url)
