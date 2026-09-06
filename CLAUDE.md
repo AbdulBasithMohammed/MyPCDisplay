@@ -42,7 +42,7 @@ the installer themselves.
 
 | Action | Result |
 |---|---|
-| Stop the running deck | **Access denied** — it runs elevated |
+| Stop the running deck | works *if* it started from `Turing Deck Autostart` (Limited); **access denied** if from `Turing Deck` (Highest) — check `Win32_Process.CommandLine`, null means elevated |
 | Register a task at `RunLevel Highest` | **Access denied** |
 | Write real `%LOCALAPPDATA%` | Silently redirected |
 | Register a task at `RunLevel Limited` | works |
@@ -83,6 +83,9 @@ deck.py            tray icon, global hotkeys, supervises main.py as a child
   ├── main.py      upstream render loop; reads THEME from config.yaml
   │     └── library/sensors/sensors_custom.py   custom sensors (see its CLAUDE.md)
   └── library/sensors/otp_sources.py            IMAP IDLE + toast watchers
+
+tools/amd_temp_service.py   separate ELEVATED task ("Turing CPU Temp"),
+                            writes cache/cpu_temp.json; nothing imports it
 ```
 
 **The OTP watchers live in the supervisor on purpose.** The child dies on every
@@ -155,6 +158,23 @@ Each of these cost real time. They are conclusions, not guesses.
   vulnerable-driver blocklist and HVCI is on, so LHM returns 0.0 — *not* NaN,
   which is why the "sensor missing" warning never fires. The user has said
   Memory Integrity stays on.
+- **CPU temperature needs a separate elevated process — do not put it back in
+  the render loop.** The Ryzen Master CLI is the only source of die temperature
+  here and it refuses to run unelevated (`User is not admin...`, exit 0). The
+  old `_AmdTempPoller` spawned it in-process behind an `IsUserAnAdmin()` check,
+  so when the deck started from `Turing Deck Autostart` (RunLevel **Limited**)
+  the poller thread returned on its first line and the panel read `n/a` forever
+  — across restarts and reboots, because nothing retried and the WARNING was
+  logged once per process. 56 of those lines sat in `log.log` over four days
+  before anyone noticed. `tools/amd_temp_service.py` now runs as the elevated
+  task `Turing CPU Temp` and publishes `cache/cpu_temp.json`; the sensor reads
+  the file and reports staleness. Elevating the whole deck instead would put the
+  IMAP client and the op.gg/dpm.lol parsers under an admin token — see
+  [DECK.md](DECK.md#elevation-and-autostart).
+- **There is no unelevated CPU temperature source on this machine.** Verified,
+  not assumed: `MSAcpi_ThermalZoneTemperature` answers `Not supported`, and
+  `Win32_PerfFormattedData_Counters_ThermalZoneInformation` does not exist. Do
+  not go looking again.
 - **PyInstaller output will not launch.** Smart App Control blocks unsigned
   binaries. `turing-deck.spec` is kept only as a record. The user has said Smart
   App Control stays on.

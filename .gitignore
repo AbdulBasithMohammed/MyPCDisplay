@@ -162,6 +162,10 @@ cache/
 # Runtime output
 deck.log
 benchmark_result.txt
+# Output of the tools/install_*.bat helpers, written next to the repo root.
+autostart_result.txt
+restart_result.txt
+temp_service_result.txt
 tools/_probe_*
 
 # Malgun Gothic is a Microsoft Windows system font, copied from C:\Windows\Fonts

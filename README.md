@@ -67,11 +67,10 @@ equally plausible candidates show nothing rather than a guess.
 
 ## Running it
 
-**Desktop shortcut** — `Turing Deck` starts it (accepts a UAC prompt, which is
-what lets the CPU temperature sensor work).
+**Desktop shortcut** — `Turing Deck` starts it.
 
 **At logon** — a scheduled task starts it automatically. See
-[Autostart](#autostart) for the two variants and why elevation matters.
+[Autostart](#autostart), and why CPU temperature needs a second one.
 
 **By hand**
 
@@ -124,18 +123,24 @@ calendar with, and a Discord client secret.
 
 ## Autostart
 
-Two variants, and the difference matters:
+The deck runs unelevated, as the logon task `Turing Deck Autostart`.
 
-- **Elevated (preferred).** `tools/install_autostart.bat`, run as administrator,
-  registers a logon task at highest run level. No UAC prompt at logon, and the
-  CPU temperature sensor works because it can reach AMD's Ryzen Master CLI.
-- **Non-elevated fallback.** A task named `Turing Deck Autostart` at
-  `RunLevel Limited`. Starts silently but cannot read CPU temperature.
-
-To check which you have:
+CPU temperature is the one thing that needs admin, because AMD's Ryzen Master
+CLI refuses to run without it. That is handled by a second, tiny task rather
+than by elevating the whole deck - register it once:
 
 ```bash
-schtasks /Query /TN "Turing Deck" /V /FO LIST
+tools/install_temp_service.bat
+```
+
+It raises a UAC prompt, registers `Turing CPU Temp` at highest run level, and
+prints the first reading so you can see it working. See
+[Elevation and autostart](DECK.md#elevation-and-autostart) for why it is split.
+
+To check both are there, and that the temperature is actually being published:
+
+```bash
+schtasks /Query /TN "Turing CPU Temp" /V /FO LIST
 ```
 
 ## Development
@@ -164,7 +169,8 @@ evidence behind each.
 
 - **Memory Integrity (HVCI) blocks WinRing0**, so LibreHardwareMonitor reads
   0.0 for CPU temperature, package power and clocks. CPU temperature comes from
-  AMD's Ryzen Master SDK CLI instead, which needs elevation.
+  AMD's Ryzen Master SDK CLI instead, run by the elevated `Turing CPU Temp`
+  task, which publishes it to `cache/cpu_temp.json` for the deck to read.
 - **Smart App Control blocks unsigned executables**, so the PyInstaller build
   (`turing-deck.spec`) produces a binary Windows refuses to launch. The app runs
   from source instead.

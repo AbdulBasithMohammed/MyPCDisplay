@@ -104,6 +104,7 @@ class ExampleCustomTextOnlyData(CustomDataSource):
 # ==============================================================================
 # DeckWhiteBlue theme :: custom sensors
 # ==============================================================================
+import json
 import os
 import re
 import threading
@@ -317,65 +318,157 @@ class ClockSeconds(CustomDataSource):
 
 
 class _AmdTempPoller:
-    """Reads CPU temperature via AMD's Ryzen Master SDK CLI, on a daemon thread.
+    """CPU temperature, read from cache/cpu_temp.json.
 
-    Why not LibreHardwareMonitor: LHM needs the ring0 driver WinRing0, which is
-    on Microsoft's vulnerable-driver blocklist. With Memory Integrity (HVCI)
-    enabled Windows refuses to load it, so LHM reports 0.0 for CPU temperature,
-    package power and clocks. AMD's own AMDRyzenMasterDriver.sys is signed and
-    loads fine, so the SDK CLI can still read the chip.
+    The number is produced by tools/amd_temp_service.py, which runs elevated as
+    the scheduled task "Turing CPU Temp". It has to be a separate process: AMD's
+    Ryzen Master CLI is the only source of die temperature here (WinRing0, and
+    therefore LibreHardwareMonitor, is blocked by Memory Integrity) and it
+    refuses to run without admin.
 
-    Requires the monitor to run elevated - the CLI prints "User is not admin..."
-    and exits otherwise. Polling happens off the render thread because each call
-    spawns a process.
+    This used to spawn the CLI from inside the render process. That silently
+    stopped working the moment the deck was autostarted by a task registered at
+    RunLevel Limited: the _is_admin() pre-check failed, the poller thread
+    returned immediately, and the panel showed n/a forever - through restarts
+    and reboots, because nothing retried and nothing escalated past a WARNING
+    logged once per process. Reading a file cannot fail that way: if the value
+    is missing or stale, `reason` says which, and it recovers on its own the
+    moment the service comes back.
+
+    The direct-CLI path is kept only for the case where the render process is
+    itself elevated (start-monitor.bat), so that launcher still works standalone.
     """
+    STATE_FILE = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "cache", "cpu_temp.json",
+    )
     CLI = os.path.join(
         os.environ.get("ProgramFiles", "C:" + os.sep + "Program Files"),
         "AMD", "RyzenMasterSDK", "AMDRyzenMasterCLI", "bin-prebuilt",
         "AMDRyzenMasterCLI.exe",
     )
-    POLL_SECONDS = 30   # each CLI call spawns a ~1.2s process; temps move slowly
+    POLL_SECONDS = 30    # each CLI call spawns a ~1.2s process; temps move slowly
+    # How often the file is re-read. Sensors tick far faster than the service
+    # polls, and this read happens on the render thread: 0.041ms per read,
+    # 0.0005ms for a gated tick (n=1000 / n=100000), so the gate is cheap
+    # insurance rather than a measured necessity.
+    READ_SECONDS = 2
+    # Two missed service polls plus the ~1.2s call itself. Below this a reading
+    # is trusted; above it we say so rather than showing a temperature from
+    # before the machine started working hard.
+    STALE_SECONDS = 90
 
-    _started = False
     _lock = threading.Lock()
+    _started = False
+    _checked_at = 0.0
     value = float("nan")
     reason = ""
 
     @classmethod
     def ensure_started(cls):
+        """Refresh from the state file, at most every READ_SECONDS."""
+        now = time.time()
         with cls._lock:
-            if cls._started:
+            if now - cls._checked_at < cls.READ_SECONDS:
                 return
-            cls._started = True
-            threading.Thread(target=cls._loop, name="amd-temp-poller", daemon=True).start()
+            cls._checked_at = now
+        cls._refresh()
 
     @classmethod
-    def _read_once(cls) -> float:
+    def _refresh(cls):
+        try:
+            with open(cls.STATE_FILE, "r", encoding="utf-8") as fh:
+                state = json.load(fh)
+        except FileNotFoundError:
+            # No service. Fall back to reading it ourselves, but only if this
+            # process is elevated - otherwise the CLI just prints "not admin".
+            if cls._is_admin():
+                cls._ensure_direct()
+            else:
+                cls.value = float("nan")
+                cls.reason = "temp service not installed (tools/install_temp_service.bat)"
+                cls._report()
+            return
+        except Exception as e:
+            cls.value = float("nan")
+            cls.reason = "unreadable state file: " + type(e).__name__
+            cls._report()
+            return
+
+        # Parsing is guarded too, not just the read. The service writes this
+        # file, but it sits in a user-writable directory and can be hand-edited
+        # or caught mid-flush, so the types are not guaranteed. An escaping
+        # ValueError would blank the element on every tick and log a line each
+        # time - the silent-dead-sensor failure this whole design exists to
+        # remove. Found by review; the tests covered {} but not {"celsius": "hot"}.
+        try:
+            if not isinstance(state, dict):
+                raise ValueError("state file is not a JSON object")
+            age = time.time() - float(state.get("ts") or 0)
+            celsius = state.get("celsius")
+            if celsius is not None:
+                celsius = float(celsius)
+        except Exception as e:
+            cls.value = float("nan")
+            cls.reason = "unreadable state file: " + type(e).__name__
+            cls._report()
+            return
+
+        if celsius is None:
+            cls.value = float("nan")
+            cls.reason = str(state.get("reason") or "no reading")
+        elif age > cls.STALE_SECONDS:
+            cls.value = float("nan")
+            cls.reason = "stale by %ds - is the Turing CPU Temp task running?" % int(age)
+        else:
+            cls.value = celsius          # already coerced above
+            cls.reason = ""
+        cls._report()
+
+    # --- direct CLI fallback, used only when already elevated ---------------
+
+    _direct_started = False
+
+    @classmethod
+    def _ensure_direct(cls):
+        with cls._lock:
+            if cls._direct_started:
+                return
+            cls._direct_started = True
+        threading.Thread(target=cls._direct_loop, name="amd-temp-poller",
+                         daemon=True).start()
+
+    @classmethod
+    def _direct_loop(cls):
         import subprocess
-        out = subprocess.run(
-            [cls.CLI, "--api", "GetPMTableData"],
-            cwd=os.path.dirname(cls.CLI),
-            capture_output=True, text=True, timeout=20,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        ).stdout
-        low = out.lower()
-        if "not admin" in low:
-            cls.reason = "needs admin"
-            return float("nan")
-        if "platform init failed" in low:
-            # The SDK cannot reach its driver. The driver being "Running" is not
-            # enough - it gets into this state and stays there until the service
-            # is restarted or the machine reboots.
-            cls.reason = "SDK: platform init failed (restart AMDRyzenMasterDriver service)"
-            return float("nan")
-        # e.g. "GetPMTableData ... cHTC Current Value: 41.783680 celsius"
-        m = re.search(r"cHTC Current Value\s*:\s*([0-9]+(?:\.[0-9]+)?)", out)
-        if not m:
-            first = (out.strip().splitlines() or ["empty output"])[0][:60]
-            cls.reason = "unexpected CLI output: " + first
-            return float("nan")
-        cls.reason = ""
-        return float(m.group(1))
+        if not os.path.exists(cls.CLI):
+            cls.value = float("nan")
+            cls.reason = "Ryzen Master SDK not installed"
+            cls._report()
+            return
+        while True:
+            try:
+                out = subprocess.run(
+                    [cls.CLI, "--api", "GetPMTableData"],
+                    cwd=os.path.dirname(cls.CLI),
+                    capture_output=True, text=True, timeout=20,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                ).stdout or ""
+                m = re.search(r"cHTC Current Value\s*:\s*([0-9]+(?:\.[0-9]+)?)", out)
+                if m:
+                    cls.value = float(m.group(1))
+                    cls.reason = ""
+                else:
+                    cls.value = float("nan")
+                    first = (out.strip().splitlines() or ["empty output"])[0][:60]
+                    cls.reason = "unexpected CLI output: " + first
+            except Exception as e:
+                cls.value = float("nan")
+                cls.reason = type(e).__name__
+            cls._report()
+            time.sleep(cls.POLL_SECONDS)
+
+    # --- reporting ----------------------------------------------------------
 
     @staticmethod
     def _is_admin() -> bool:
@@ -389,7 +482,7 @@ class _AmdTempPoller:
 
     @classmethod
     def _report(cls):
-        """Log the reason once, and again only if it changes."""
+        """Log the reason once, and again only when it changes."""
         if cls.reason and cls.reason != cls._logged:
             cls._logged = cls.reason
             try:
@@ -397,42 +490,20 @@ class _AmdTempPoller:
                 logger.warning("CPU temperature unavailable - %s", cls.reason)
             except Exception:
                 pass
-
-    @classmethod
-    def _loop(cls):
-        if not os.path.exists(cls.CLI):
-            cls.reason = "Ryzen Master SDK not installed"
-            cls._report()
-            return
-        # Check up front: without elevation the CLI does not fail fast, it hangs
-        # until killed. Spawning a doomed process every few seconds forever is
-        # worse than simply reporting n/a.
-        if not cls._is_admin():
-            cls.reason = "needs admin - run start-monitor.bat"
-            cls._report()
-            return
-        failures = 0
-        while True:
-            try:
-                v = cls._read_once()
-                cls.value = v
-                failures = 0 if v == v else failures + 1
-            except Exception as e:
-                cls.value = float("nan")
-                cls.reason = type(e).__name__
-                failures += 1
-            cls._report()
-            # Back off when it is not working, so a broken setup stays cheap.
-            time.sleep(cls.POLL_SECONDS if failures < 3 else 60)
+        elif not cls.reason:
+            cls._logged = ""
 
 
 class CpuTemperature(CustomDataSource):
-    """CPU temperature via the AMD Ryzen Master SDK, or 'n/a'.
+    """CPU temperature published by the elevated temp service, or 'n/a'.
 
     The built-in CPU/TEMPERATURE stat is disabled in this theme because both of
     its backends fail on this machine: LHM is locked out by the driver blocklist
     (returns 0.0), and psutil has no temperature support on Windows at all.
     NVIDIA GPU values are unaffected because they come from NVML, not ring0.
+
+    The reading comes from cache/cpu_temp.json - see _AmdTempPoller for why the
+    Ryzen Master CLI is spawned by a separate elevated task rather than here.
     """
 
     def as_numeric(self) -> float:

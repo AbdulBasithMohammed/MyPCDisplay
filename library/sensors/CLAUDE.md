@@ -19,7 +19,7 @@ a dash, a status word, or the last good value — never `""`.
 
 **4. Never block.** The loop is single-threaded and shared with rendering. Any IO
 belongs on a daemon thread that publishes to class state; sensors only read that
-state. `Discord`, `League` and `_AmdTempPoller` all follow this shape:
+state. `Discord` and `League` both follow this shape:
 
 ```python
 class Thing:
@@ -37,6 +37,12 @@ class Thing:
 ```
 
 Sensors call `ensure_started()` on every tick; it is cheap after the first.
+
+`_AmdTempPoller` is the exception that proves the rule: its work needs admin, so
+it cannot be done on a thread inside an unelevated render process at all. It
+reads a value published by `tools/amd_temp_service.py` instead, keeping the same
+`ensure_started()` / class-attribute interface. Anything else that needs
+elevation should copy that split rather than trying to escalate in-process.
 
 ## Exports
 

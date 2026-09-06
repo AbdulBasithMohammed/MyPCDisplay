@@ -531,30 +531,45 @@ Other behaviours:
 ## Elevation and autostart
 
 Elevation matters for exactly one thing: CPU temperature comes from AMD's Ryzen
-Master SDK CLI, which refuses to run without admin. Everything else works fine
-unelevated.
+Master SDK CLI, which refuses to run without admin. Everything else - the panel,
+the sensors, the mail watchers, the League screen - works fine unelevated.
 
-There are two autostart arrangements, and it is worth knowing which you have:
+That one requirement is isolated in its own task rather than being met by
+elevating the whole deck:
 
-| | Registered by | UAC at logon | CPU temp |
-|---|---|---|---|
-| `Turing Deck` (highest run level) | `tools\install_autostart.bat`, **run as admin** | none | works |
-| `Turing Deck Autostart` (limited) | fallback, no admin needed | none | **n/a** |
+| Task | Run level | What it does |
+|---|---|---|
+| `Turing Deck Autostart` | Limited | the deck: panel, tray icon, hotkeys, OTP |
+| `Turing CPU Temp` | Highest | spawns the Ryzen CLI, writes `cache/cpu_temp.json` |
 
-The elevated one is preferred. Register it from an elevated PowerShell:
+Register the temperature task once, from Explorer or any shell (it raises its
+own UAC prompt):
 
-    tools\install_autostart.bat
+    tools\install_temp_service.bat
 
-Both target `pythonw.exe` directly rather than a `.bat`, so no console flashes,
-and both delay ~20s for USB to enumerate.
+**Why split it.** The deck parses untrusted network data - IMAP bodies, op.gg
+and dpm.lol HTML and JSON, downloaded PNGs decoded by PIL. A path traversal has
+already shipped in that code once (`rank_emblem`, fixed in `f9583db`). Running
+all of it under an admin token to satisfy one 40-line temperature read is a bad
+trade. `tools/amd_temp_service.py` takes no arguments, reads no configuration,
+and executes one hardcoded path under `Program Files`.
+
+Data flows one way, elevated -> unelevated. The service only writes the JSON;
+the deck only reads it. A user-level process that tampers with the file can make
+the panel show a wrong number - which it could already do by editing the theme -
+and nothing privileged ever reads it back.
+
+Running the deck itself elevated (`tools\install_autostart.bat` as admin, or the
+`start-deck.bat` Desktop shortcut) still works and still reads the temperature
+directly, via a fallback in `_AmdTempPoller` that only fires when the render
+process is already admin. It is no longer the recommended arrangement.
 
     # which tasks exist
-    Get-ScheduledTask -TaskName "Turing Deck*"
+    Get-ScheduledTask -TaskName "Turing *"
+    # is the temperature actually being published
+    Get-Content cache\cpu_temp.json
     # remove one
-    Unregister-ScheduledTask -TaskName "Turing Deck Autostart" -Confirm:$false
-
-The Desktop shortcut runs `start-deck.bat`, which self-elevates - so it always
-gives you the elevated variant, at the cost of one UAC prompt.
+    Unregister-ScheduledTask -TaskName "Turing CPU Temp" -Confirm:$false
 
 ## Troubleshooting
 
