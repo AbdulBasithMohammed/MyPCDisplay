@@ -50,6 +50,6 @@ pywin32>=312; sys_platform=="win32"
 #   Media.Control              -> Now Playing (sensors_custom.py)
 #   UI.Notifications[.Management] -> reading toasts for OTPs (otp_sources.py)
 winrt-Windows.Media.Control~=3.2.1; sys_platform=="win32"
-winrt-Windows.ApplicationModel~=3.2.1; sys_platform=="win32"
+winrt-Windows.ApplicationModel~=4!10.0.28000; sys_platform=="win32"
 winrt-Windows.UI.Notifications~=3.2.1; sys_platform=="win32"
 winrt-Windows.UI.Notifications.Management~=3.2.1; sys_platform=="win32"
